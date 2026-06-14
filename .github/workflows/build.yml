@@ -1,0 +1,119 @@
+name: Build Desktop Installers
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: "22.11.0"
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            target: aarch64-apple-darwin
+            node_asset: darwin-arm64
+          - platform: macos-13
+            target: x86_64-apple-darwin
+            node_asset: darwin-x64
+          - platform: windows-latest
+            target: x86_64-pc-windows-msvc
+            node_asset: win-x64
+          - platform: windows-11-arm
+            target: aarch64-pc-windows-msvc
+            node_asset: win-arm64
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          key: ${{ matrix.target }}
+
+      - name: Install root dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build sidecar bundle
+        working-directory: sidecar
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm run bundle
+
+      - name: Copy sidecar bundle to resources
+        shell: bash
+        run: |
+          mkdir -p src-tauri/resources/sidecar
+          cp sidecar/dist/sidecar-bundle.js src-tauri/resources/sidecar/
+
+      - name: Download Node.js runtime (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-${{ matrix.node_asset }}.tar.gz" -o node.tar.gz
+          mkdir -p node-extracted
+          tar xzf node.tar.gz -C node-extracted --strip-components=1
+          mkdir -p src-tauri/resources/node-runtime
+          cp -r node-extracted/bin src-tauri/resources/node-runtime/
+          cp -r node-extracted/lib src-tauri/resources/node-runtime/
+          cp -r node-extracted/include src-tauri/resources/node-runtime/ 2>/dev/null || true
+          echo "=== node-runtime contents ==="
+          ls -la src-tauri/resources/node-runtime/bin/
+
+      - name: Download Node.js runtime (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $url = "https://nodejs.org/dist/v${{ env.NODE_VERSION }}/node-v${{ env.NODE_VERSION }}-${{ matrix.node_asset }}.zip"
+          Invoke-WebRequest -Uri $url -OutFile node.zip
+          Expand-Archive node.zip -DestinationPath node-extracted
+          New-Item -ItemType Directory -Force -Path src-tauri/resources/node-runtime
+          $src = Get-ChildItem node-extracted | Select-Object -First 1
+          Copy-Item "$($src.FullName)/*" src-tauri/resources/node-runtime/ -Recurse -Force
+          Write-Host "=== node-runtime contents ==="
+          Get-ChildItem src-tauri/resources/node-runtime/
+
+      - name: Verify resources
+        shell: bash
+        run: |
+          echo "=== resources/sidecar ==="
+          ls -la src-tauri/resources/sidecar/
+          echo "=== resources/node-runtime ==="
+          ls -la src-tauri/resources/node-runtime/
+
+      - name: Build Tauri app
+        run: pnpm tauri build --target ${{ matrix.target }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: RabbitCoding-${{ matrix.target }}
+          path: |
+            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.dmg
+            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.app
+            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.msi
+            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.exe
+            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.nsis.zip
+          if-no-files-found: warn

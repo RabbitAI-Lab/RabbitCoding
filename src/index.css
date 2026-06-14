@@ -1,0 +1,55 @@
+@import "tailwindcss";
+@import '@xterm/xterm/css/xterm.css';
+@import '@ant-design/x-markdown/themes/light.css';
+@import '@ant-design/x-markdown/themes/dark.css';
+
+/* 启用基于 .dark class 的暗色模式 */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* 拖拽区域内禁止选中文字 */
+[data-tauri-drag-region] {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Sender Switch 禁用过渡动画 */
+.ant-sender-switch,
+.ant-sender-switch *,
+.ant-sender-switch .ant-btn,
+.ant-sender-switch .ant-btn::before,
+.ant-sender-switch .ant-btn::after {
+  transition: none !important;
+  animation: none !important;
+}
+
+/* 去除 antd Button 点击波纹效果 */
+.ant-sender-switch .ant-btn .ant-wave {
+  display: none !important;
+}
+
+/* XMarkdown 主题：文字颜色 + 缩小字号（覆盖 light/dark.css 默认值） */
+.x-markdown-light {
+  --text-color: #141414;
+  --font-size: 13px;
+}
+.x-markdown-dark {
+  --text-color: rgba(255, 255, 255, 0.85);
+  --font-size: 13px;
+}
+
+.x-markdown-light h1, .x-markdown-dark h1 { font-size: 16px !important; line-height: 24px !important; }
+.x-markdown-light h2, .x-markdown-dark h2 { font-size: 14px !important; line-height: 22px !important; }
+.x-markdown-light h3, .x-markdown-dark h3 { font-size: 13px !important; line-height: 20px !important; }
+.x-markdown-light h4, .x-markdown-dark h4 { font-size: 12px !important; }
+.x-markdown-light pre code,
+.x-markdown-light code,
+.x-markdown-dark pre code,
+.x-markdown-dark code { font-size: 12px !important; }
+
+/* 登录按钮：胡萝卜橙主题色（与 SendButton 统一） */
+.login-orange-btn:not(:disabled):hover {
+  background-color: #D46020 !important;
+}
+.dark .login-orange-btn:not(:disabled):hover {
+  background-color: #E87238 !important;
+}
