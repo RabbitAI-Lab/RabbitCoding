@@ -1,0 +1,41 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Capability for the main window",
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "core:default",
+    "core:window:allow-start-dragging",
+    "core:event:default",
+    "opener:default",
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [
+        { "url": "x-apple.systempreferences:*" },
+        { "url": "ms-settings:*" }
+      ]
+    },
+    "pty:default",
+    "dialog:default",
+    "fs:read-dirs",
+    "fs:read-files",
+    "fs:allow-read-text-file",
+    "fs:allow-write-text-file",
+    {
+      "identifier": "fs:scope",
+      "allow": [
+        { "path": "**" },
+        { "path": "$HOME/**" },
+        { "path": "$HOME/.agents/**" }
+      ]
+    },
+    "core:window:allow-current-monitor",
+    "core:window:allow-inner-position",
+    "core:window:allow-inner-size",
+    "window-state:default",
+    "notification:default",
+    "deep-link:default"
+  ]
+}
