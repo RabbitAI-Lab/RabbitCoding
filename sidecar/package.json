@@ -5,6 +5,7 @@
   "scripts": {
     "build": "tsc",
     "bundle": "esbuild src/index.ts --bundle --platform=node --format=esm --outfile=dist/sidecar-bundle.js",
+    "setup-resources": "node scripts/setup-resources.mjs",
     "dev": "tsc --watch"
   },
   "dependencies": {

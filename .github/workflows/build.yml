@@ -18,7 +18,7 @@ jobs:
           - platform: macos-latest
             target: aarch64-apple-darwin
             node_asset: darwin-arm64
-          - platform: macos-13
+          - platform: macos-15-intel
             target: x86_64-apple-darwin
             node_asset: darwin-x64
           - platform: windows-latest
@@ -63,11 +63,9 @@ jobs:
           pnpm install --frozen-lockfile
           pnpm run bundle
 
-      - name: Copy sidecar bundle to resources
+      - name: Copy sidecar bundle and native binary to resources
         shell: bash
-        run: |
-          mkdir -p src-tauri/resources/sidecar
-          cp sidecar/dist/sidecar-bundle.js src-tauri/resources/sidecar/
+        run: node sidecar/scripts/setup-resources.mjs --no-bundle
 
       - name: Download Node.js runtime (Unix)
         if: runner.os != 'Windows'
@@ -100,9 +98,16 @@ jobs:
         shell: bash
         run: |
           echo "=== resources/sidecar ==="
-          ls -la src-tauri/resources/sidecar/
+          ls -lh src-tauri/resources/sidecar/
           echo "=== resources/node-runtime ==="
           ls -la src-tauri/resources/node-runtime/
+          # 验证原生二进制存在
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            test -f src-tauri/resources/sidecar/claude.exe || { echo "ERROR: claude.exe not found"; exit 1; }
+          else
+            test -f src-tauri/resources/sidecar/claude || { echo "ERROR: claude binary not found"; exit 1; }
+          fi
+          echo "Native CLI binary verified."
 
       - name: Write Apple API key (macOS only)
         if: runner.os == 'macOS'

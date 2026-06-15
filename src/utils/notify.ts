@@ -65,19 +65,8 @@ async function sendDesktopNotificationViaRust(title: string, body: string): Prom
   }
 }
 
-/** 发送桌面通知：优先用 Rust 后端（dev 模式可靠），回退到 Tauri 插件 */
-async function sendDesktopNotification(title: string, body: string): Promise<boolean> {
-  console.debug('[notify] sendDesktopNotification:', { title, body });
-
-  // 方案 1：通过 Rust 后端（osascript / PowerShell），不依赖应用签名
-  const rustOk = await sendDesktopNotificationViaRust(title, body);
-  if (rustOk) {
-    console.debug('[notify] Rust 通知发送成功');
-    return true;
-  }
-
-  // 方案 2：回退到 Tauri notification 插件（release 模式有效）
-  console.debug('[notify] Rust 通知失败，回退到 Tauri 插件');
+/** 通过 Tauri notification 插件发送桌面通知（release 模式可靠，需应用签名） */
+async function sendDesktopNotificationViaTauri(title: string, body: string): Promise<boolean> {
   try {
     const { isPermissionGranted, requestPermission, sendNotification } =
       await import('@tauri-apps/plugin-notification');
@@ -95,8 +84,38 @@ async function sendDesktopNotification(title: string, body: string): Promise<boo
     }
     return false;
   } catch (e) {
-    console.warn('[notify] Tauri 通知也失败:', e);
+    console.warn('[notify] Tauri 通知失败:', e);
     return false;
+  }
+}
+
+/**
+ * 发送桌面通知：根据构建模式动态切换优先级
+ * - dev 模式：优先 Rust(osascript)，失败回退 Tauri 插件（绕过 ad-hoc 签名限制）
+ * - release 模式：优先 Tauri 原生通知（显示应用名/图标），失败回退 osascript
+ */
+async function sendDesktopNotification(title: string, body: string): Promise<boolean> {
+  const isDev = import.meta.env.DEV;
+  console.debug('[notify] sendDesktopNotification:', { title, body, isDev });
+
+  if (isDev) {
+    // dev 模式：优先 osascript（绕过 ad-hoc 签名限制）
+    const rustOk = await sendDesktopNotificationViaRust(title, body);
+    if (rustOk) {
+      console.debug('[notify] Rust 通知发送成功（dev 模式首选）');
+      return true;
+    }
+    console.debug('[notify] Rust 通知失败，回退到 Tauri 插件');
+    return await sendDesktopNotificationViaTauri(title, body);
+  } else {
+    // release 模式：优先 Tauri 原生通知（显示应用名/图标，系统设置可见）
+    const tauriOk = await sendDesktopNotificationViaTauri(title, body);
+    if (tauriOk) {
+      console.debug('[notify] Tauri 原生通知发送成功（release 模式首选）');
+      return true;
+    }
+    console.debug('[notify] Tauri 通知失败，回退到 Rust(osascript)');
+    return await sendDesktopNotificationViaRust(title, body);
   }
 }
 
