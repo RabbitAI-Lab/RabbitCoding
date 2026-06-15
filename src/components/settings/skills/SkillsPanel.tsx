@@ -101,7 +101,6 @@ export default function SkillsPanel({ onLayoutChange }: SkillsPanelProps) {
               <SkillCard
                 key={skill.path}
                 name={skill.name}
-                description={skill.description}
                 active={skill.path === selectedSkill.path}
                 onClick={() => setSelectedSkill(skill)}
               />
