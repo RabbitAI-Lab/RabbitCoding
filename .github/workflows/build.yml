@@ -104,8 +104,36 @@ jobs:
           echo "=== resources/node-runtime ==="
           ls -la src-tauri/resources/node-runtime/
 
+      - name: Write Apple API key (macOS only)
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          APPLE_API_KEY_CONTENT: ${{ secrets.APPLE_API_KEY_CONTENT }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+        run: |
+          mkdir -p private_keys
+          printf '%s\n' "$APPLE_API_KEY_CONTENT" > "private_keys/AuthKey_${APPLE_API_KEY}.p8"
+
       - name: Build Tauri app
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_PATH: ${{ github.workspace }}/private_keys/AuthKey_${{ secrets.APPLE_API_KEY }}.p8
         run: pnpm tauri build --target ${{ matrix.target }}
+
+      - name: Verify macOS signature (macOS only)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          APP="src-tauri/target/${{ matrix.target }}/release/bundle/macos/Rabbit Coding.app"
+          if [ -d "$APP" ]; then
+            echo "=== codesign verify ==="
+            codesign --verify --deep --strict --verbose=2 "$APP" || true
+            echo "=== spctl assess ==="
+            spctl -a -t exec -vv "$APP" || true
+          fi
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
