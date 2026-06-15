@@ -9,7 +9,7 @@
  */
 
 import { createRequire } from "node:module";
-import { copyFileSync, chmodSync, existsSync, mkdirSync, realpathSync } from "node:fs";
+import { copyFileSync, chmodSync, existsSync, mkdirSync, realpathSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -115,6 +115,7 @@ async function main() {
 
   copyBundle();
   copyNativeBinary();
+  ensurePackageJson();
 
   // 验证
   console.log("\n[setup-resources] Verification:");
@@ -129,6 +130,20 @@ async function main() {
   }
 
   console.log("[setup-resources] Done.");
+}
+
+/**
+ * 确保 resources/sidecar/ 目录下存在 package.json（声明 type: module）
+ *
+ * esbuild --format=esm 产物使用 import.meta.url，Node.js 必须将其识别为 ESM。
+ * 开发模式下 sidecar/package.json 的 "type": "module" 生效，
+ * 但生产打包只复制 bundle 文件，缺少 package.json 会导致 CommonJS 解析失败。
+ */
+function ensurePackageJson() {
+  const pkgJsonPath = join(resourcesDir, "package.json");
+  const content = JSON.stringify({ type: "module" }, null, 2) + "\n";
+  writeFileSync(pkgJsonPath, content, "utf-8");
+  console.log(`[setup-resources] Wrote package.json (type: module): ${pkgJsonPath}`);
 }
 
 main().catch((err) => {

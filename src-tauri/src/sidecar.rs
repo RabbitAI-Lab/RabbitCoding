@@ -287,14 +287,17 @@ fn get_sidecar_path(app: &AppHandle) -> SidecarPath {
         // 通过 app.path().resource_dir() 获取资源目录
         match app.path().resource_dir() {
             Ok(resource_dir) => {
-                let node_bin = resource_dir
+                // Tauri 打包时保留 src-tauri/ 的相对路径结构，
+                // tauri.conf.json 中 "resources/sidecar" → Contents/Resources/resources/sidecar/
+                let resources_dir = resource_dir.join("resources");
+                let node_bin = resources_dir
                     .join("node-runtime")
                     .join(if cfg!(target_os = "windows") {
                         "node.exe"
                     } else {
                         "bin/node"
                     });
-                let sidecar_js = resource_dir
+                let sidecar_js = resources_dir
                     .join("sidecar")
                     .join("sidecar-bundle.js");
                 println!(

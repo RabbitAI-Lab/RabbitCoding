@@ -158,7 +158,8 @@ pub fn run() {
                     } else {
                         "bin"
                     };
-                    let node_bin_dir = resource_dir.join("node-runtime").join(node_bin_sub);
+                    // Tauri 打包保留路径结构：resources/node-runtime → Contents/Resources/resources/node-runtime
+                    let node_bin_dir = resource_dir.join("resources").join("node-runtime").join(node_bin_sub);
 
                     // npm 全局安装目录——指向 app_data_dir 下的可写路径
                     // macOS 应用包签名后只读，Windows Program Files 需管理员权限
