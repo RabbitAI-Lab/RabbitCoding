@@ -11,6 +11,8 @@
 
 import { query, createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
+import { existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import * as nodePath from "path";
 import * as nodeFs from "fs/promises";
 import type {
@@ -22,6 +24,25 @@ import type {
   TokenUsage,
   AskUserQuestionItem,
 } from "./protocol.js";
+
+/**
+ * 检测生产环境下的原生 CLI 二进制路径
+ *
+ * esbuild 打包后，SDK 无法通过 node_modules 解析平台特定的原生二进制。
+ * 生产模式下，原生二进制被复制到 bundle 同目录（resources/sidecar/claude）。
+ * 开发模式下，该文件不存在，返回 undefined，SDK 走 node_modules 正常解析。
+ */
+function resolveNativeCliBinary(): string | undefined {
+  try {
+    const here = nodePath.dirname(fileURLToPath(import.meta.url));
+    const binName = process.platform === "win32" ? "claude.exe" : "claude";
+    const candidate = nodePath.join(here, binName);
+    if (existsSync(candidate)) return candidate;
+  } catch {}
+  return undefined;
+}
+
+const NATIVE_CLI_BINARY = resolveNativeCliBinary();
 
 /** 活跃查询管理 */
 const activeQueries = new Map<string, AbortController>();
@@ -272,6 +293,7 @@ async function runQuery(
       thinking: { type: "adaptive" },
       includePartialMessages: true,
       ...(extraOptions as any),
+      ...(NATIVE_CLI_BINARY ? { pathToClaudeCodeExecutable: NATIVE_CLI_BINARY } : {}),
     };
 
     // 对 Spec 查询注入 WriteSpec MCP 工具

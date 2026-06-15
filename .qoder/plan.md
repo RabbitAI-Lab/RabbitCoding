@@ -1,43 +1,85 @@
-# 在 Spec 生成提示词中说明不要生成 Plan 副产物
+# 修复：打包后 Dock 图标和安装图标未更新
 
-## Context（背景）
+## 问题背景
 
-Spec 生成流程使用 Claude SDK 的 `permissionMode: 'plan'` 来限制工具权限（只允许只读工具 + WriteSpec）。但在 plan 模式下，模型倾向于调用 `ExitPlanMode` 呈现一份 plan，并可能在 `.claude/plans/` 目录留下 plan 副产物文件。
+用户更新了 `src-tauri/icons/` 目录下的所有图标文件（通过 `tauri icon` 命令从新源图生成），但打包后 macOS Dock 中和 DMG 安装包中仍显示旧的 Tauri 默认图标。
 
-虽然 sidecar（`sidecar/src/agent.ts`）已经在 `canUseTool` 中拦截了 `ExitPlanMode`（返回 deny），但从提示词层面直接告知模型「不要生成 plan」更干净，可减少模型浪费 turn 去构造 plan、避免无谓的 token 消耗和副产物文件。
+经调查，源图标文件本身是**正确的**（icns 包含完整 16x16~512x512@2x 分辨率，MD5 与备份不同）。问题出在 macOS 缓存机制和构建缓存两方面。
 
-本次改动仅针对 spec 生成的提示词，**不修改** spec 文档内部的「实现计划」章节结构（那是 spec 文档的合法组成部分），也**不修改** plan 模式本身。
+## 根因分析
 
-## 目标文件
+### 根因 1：macOS LaunchServices 图标缓存（最主要原因）
 
-- `src/utils/specGenerator.ts` — 仅修改 [buildSpecPrompt](src/utils/specGenerator.ts#L93-L114) 函数
+macOS 会**激进缓存** App 图标。当安装同 Bundle Identifier（`com.rabbitai-lab.coding`）的新版本时，Dock / Finder / Launchpad 仍显示缓存的旧图标。即使 App Bundle 内的 icns 文件已正确替换，系统也不会立即刷新。
 
-## 具体改动
+### 根因 2：Cargo 构建缓存未清理
 
-在 `buildSpecPrompt` 返回的提示词中，增加一条明确指令，要求模型：
+`build.rs` 中仅有 `cargo:rerun-if-changed=resources`，缺少对 `icons/` 目录的变更监听。增量构建时 Cargo 可能复用上次构建缓存的图标资源。
 
-1. **不要生成 plan** —— 不要调用 `ExitPlanMode`，不要生成任何 plan 文档或 `.claude/plans/` 副产物。
-2. **只产出 spec 文档** —— 唯一的产出方式是通过 `WriteSpec` 工具把规范文档写入 `.rabbit/specs/`。
+### 根因 3：Debug 模式不打包图标（说明，非 Bug）
 
-### 拟新增的提示词文本（英文，与现有提示词语言保持一致）
+`tauri dev` 生成的 debug bundle 不包含图标资源和 `CFBundleIconFile` 键，这是 Tauri 的正常行为——图标仅在 `tauri build`（release）时打包。
 
-在现有 `IMPORTANT: ...` 段落之后、`User Request` 之前，插入：
+## 解决方案
 
+### 步骤 1：清理 Rust 构建缓存后重新打包
+
+```bash
+cd src-tauri
+cargo clean
+cd ..
+pnpm tauri build
 ```
-Do NOT generate a plan. Do not call ExitPlanMode, and do not produce any plan document or leave any files under a .claude/plans/ directory. Your only deliverable is the specification document saved via the WriteSpec tool.
+
+这确保图标资源被完全重新打包进 App Bundle。
+
+### 步骤 2：清理 macOS 图标缓存
+
+打包完成后安装新版本前/后，执行以下命令清除系统图标缓存：
+
+```bash
+# 方法 A：重建 LaunchServices 数据库（推荐）
+/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -kill -seed -lint -r -domain local -domain system -domain user
+
+# 方法 B：手动清除图标缓存文件
+sudo rm -rfv /Library/Caches/com.apple.iconservices.store
+sudo find /private/var/folders/ -name com.apple.dock.iconcache -exec rm -fv {} \;
+sudo find /private/var/folders/ -name com.apple.iconservices -exec rm -rfv {} \;
+
+# 重启 Dock 和 Finder
+killall Dock
+killall Finder
 ```
 
-其余内容（包含「4. **实现计划**」章节在内的 spec 结构、Steps 流程）保持不变。
+如果以上无效，**重启 Mac** 是最彻底的方式。
 
-## 不在本次范围
+### 步骤 3（可选改进）：在 build.rs 中添加 icons 变更监听
 
-- 不改动 `sidecar/src/agent.ts` 中对 `ExitPlanMode` 的拦截逻辑（已存在的兜底保护保留）。
-- 不改动 plan 模式的 `permissionMode` 配置。
-- 不改动 spec 文档的章节结构。
+在 `src-tauri/build.rs` 的 `ensure_resources()` 函数末尾添加：
 
-## 验证方式
+```rust
+println!("cargo:rerun-if-changed=icons");
+```
 
-1. 启动应用（`pnpm tauri dev`），触发一次 spec 生成（发送一条任务消息，进入 spec 流程）。
-2. 观察生成的 spec 文档是否正常写入 `.rabbit/specs/` 目录，且内容结构完整（仍包含「实现计划」章节）。
-3. 确认 `.claude/plans/` 目录下没有因本次 spec 生成而产生新的 plan 副产物文件。
-4. 查看 sidecar stderr 日志，确认模型不再尝试调用 `ExitPlanMode`（即 `[agent] Blocked ExitPlanMode` 日志不再频繁出现）。
+这样图标文件变更时 Cargo 会自动触发重新构建，避免增量构建使用缓存。
+
+## 验证方法
+
+1. 重新打包后，检查 release bundle 中的图标：
+   ```bash
+   # 检查 App 内的 icns 文件
+   APP="src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Rabbit Coding.app"
+   md5 "$APP/Contents/Resources/icon.icns"
+   md5 src-tauri/icons/icon.icns
+   # 两个 MD5 应一致
+   ```
+
+2. 清除缓存后安装新版 DMG，确认 Dock 图标已更新为新图标
+
+3. 如果 Dock 仍显示旧图标，重启 Mac 后再次确认
+
+## 关键文件
+
+- `src-tauri/icons/icon.icns` — macOS App 图标源文件（已正确）
+- `src-tauri/tauri.conf.json` — 图标配置（已正确）
+- `src-tauri/build.rs` — 需添加 icons 变更监听

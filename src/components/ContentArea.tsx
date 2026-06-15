@@ -454,7 +454,7 @@ export default function ContentArea({ store, onOpenSettings }: ContentAreaProps)
               </div>
 
               {/* 底部输入框（follow-up） */}
-              <div className="px-4 py-3 border-t border-gray-100 dark:border-gray-800">
+              <div className="px-4 py-3">
                 <Sender
                   value={senderValue}
                   onChange={handleChange}
