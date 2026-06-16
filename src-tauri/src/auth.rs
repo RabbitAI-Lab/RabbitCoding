@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
-use tauri::command;
+use std::io::{Read, Write};
+use tauri::{command, AppHandle, Emitter};
 
 // ============================================================
 // 常量
@@ -7,7 +8,13 @@ use tauri::command;
 
 const CASDOOR_BASE_URL: &str = "https://auth.rabbitai-lab.com";
 const CASDOOR_CLIENT_ID: &str = "1a2b435570a36765109d";
-const REDIRECT_URI: &str = "rabbitcoding://auth/callback";
+// OAuth 回调走 loopback HTTP 服务：浏览器在 Casdoor 登录后被重定向到
+// http://127.0.0.1:{AUTH_CALLBACK_PORT}/callback?code=&state=，由本地服务捕获 code/state，
+// 再通过 Tauri 事件 `auth-callback` 通知前端。无需注册自定义 scheme / .app bundle，
+// tauri dev 与生产 .app 行为一致。
+const AUTH_CALLBACK_PORT: u16 = 17331;
+const REDIRECT_URI: &str = "http://127.0.0.1:17331/callback";
+const AUTH_CALLBACK_EVENT: &str = "auth-callback";
 
 // ============================================================
 // 返回结构（camelCase 对齐前端）
@@ -235,4 +242,134 @@ pub async fn casdoor_complete_login(
         email: userinfo.email,
         avatar: userinfo.avatar,
     })
+}
+
+// ============================================================
+// 本地 OAuth 回调 HTTP 服务（loopback）
+// ============================================================
+
+/// 启动 loopback 回调服务。应在应用启动时调用一次。
+///
+/// 监听 127.0.0.1:AUTH_CALLBACK_PORT，收到 `GET /callback?code=&state=` 后：
+///   1. 通过 Tauri 事件 `auth-callback`（payload: { code, state }）通知前端；
+///   2. 向浏览器返回「登录成功」提示页面。
+///
+/// 使用 std::net + 独立线程实现，不引入额外依赖。
+pub fn start_auth_callback_server(app: AppHandle) {
+    std::thread::spawn(move || {
+        let listener = match std::net::TcpListener::bind(("127.0.0.1", AUTH_CALLBACK_PORT)) {
+            Ok(l) => l,
+            Err(e) => {
+                eprintln!(
+                    "[auth] callback server: bind 127.0.0.1:{} failed: {e}",
+                    AUTH_CALLBACK_PORT
+                );
+                return;
+            }
+        };
+        eprintln!(
+            "[auth] callback server listening on http://127.0.0.1:{}/callback",
+            AUTH_CALLBACK_PORT
+        );
+
+        for incoming in listener.incoming() {
+            let mut stream = match incoming {
+                Ok(s) => s,
+                Err(_) => continue,
+            };
+            let app = app.clone();
+            std::thread::spawn(move || handle_callback_connection(&mut stream, &app));
+        }
+    });
+}
+
+/// 处理单次回调连接：解析请求行，提取 code/state/error，发事件并返回响应页面。
+fn handle_callback_connection(stream: &mut std::net::TcpStream, app: &AppHandle) {
+    let mut buf = [0u8; 8192];
+    let n = match stream.read(&mut buf) {
+        Ok(n) if n > 0 => n,
+        _ => return,
+    };
+    let req = String::from_utf8_lossy(&buf[..n]);
+
+    // 解析请求行: GET /callback?code=...&state=... HTTP/1.1
+    let req_line = req.lines().next().unwrap_or("");
+    let path = req_line.split_whitespace().nth(1).unwrap_or("");
+    let (loc, query) = path.split_once('?').unwrap_or((path, ""));
+
+    let mut code = String::new();
+    let mut state = String::new();
+    let mut error = String::new();
+    for kv in query.split('&') {
+        if let Some((k, v)) = kv.split_once('=') {
+            match k {
+                "code" => code = percent_decode(v),
+                "state" => state = percent_decode(v),
+                "error" => error = percent_decode(v),
+                _ => {}
+            }
+        }
+    }
+
+    let (status, title, message): (&str, &str, String) = if loc == "/callback" {
+        if !code.is_empty() {
+            let _ = app.emit(
+                AUTH_CALLBACK_EVENT,
+                serde_json::json!({ "code": code, "state": state }),
+            );
+            (
+                "200 OK",
+                "登录成功",
+                "登录成功，可以关闭此页面并返回应用。".to_string(),
+            )
+        } else {
+            (
+                "400 Bad Request",
+                "登录失败",
+                format!(
+                    "登录失败：{}",
+                    if error.is_empty() { "未知错误" } else { &error }
+                ),
+            )
+        }
+    } else {
+        ("404 Not Found", "未找到", "Not Found".to_string())
+    };
+
+    let html = format!(
+        "<!doctype html><html><head><meta charset=\"utf-8\"><title>{title}</title></head>\
+         <body style=\"font-family:-apple-system,BlinkMacSystemFont,sans-serif;text-align:center;padding:60px\">\
+         <h2>{title}</h2><p>{message}</p></body></html>"
+    );
+    let resp = format!(
+        "HTTP/1.1 {status}\r\nContent-Type: text/html; charset=utf-8\r\nConnection: close\r\nContent-Length: {len}\r\n\r\n{html}",
+        len = html.len()
+    );
+    let _ = stream.write_all(resp.as_bytes());
+    let _ = stream.flush();
+}
+
+/// 简易 percent-decode（处理 %XX 与 +），用于 OAuth 回调参数（code/state/error 均为 ASCII）。
+fn percent_decode(s: &str) -> String {
+    let bytes = s.as_bytes();
+    let mut out = String::with_capacity(s.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'+' => out.push(' '),
+            b'%' if i + 2 < bytes.len() => {
+                let hex = std::str::from_utf8(&bytes[i + 1..i + 3]).unwrap_or("");
+                if let Ok(b) = u8::from_str_radix(hex, 16) {
+                    out.push(b as char);
+                    i += 3;
+                    continue;
+                } else {
+                    out.push('%');
+                }
+            }
+            c => out.push(c as char),
+        }
+        i += 1;
+    }
+    out
 }

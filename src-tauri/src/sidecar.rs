@@ -288,6 +288,7 @@ fn get_sidecar_path(app: &AppHandle) -> SidecarPath {
         match app.path().resource_dir() {
             Ok(resource_dir) => {
                 let node_bin = resource_dir
+                    .join("resources")
                     .join("node-runtime")
                     .join(if cfg!(target_os = "windows") {
                         "node.exe"
@@ -295,6 +296,7 @@ fn get_sidecar_path(app: &AppHandle) -> SidecarPath {
                         "bin/node"
                     });
                 let sidecar_js = resource_dir
+                    .join("resources")
                     .join("sidecar")
                     .join("sidecar-bundle.js");
                 println!(
