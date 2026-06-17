@@ -133,19 +133,35 @@ jobs:
           BASE_VERSION=$(node -p "require('./src-tauri/tauri.conf.json').version")
           if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
             TAG_VERSION="${GITHUB_REF#refs/tags/v}"
-            echo "is_nightly=false"                        >> "$GITHUB_OUTPUT"
-            echo "tag_name=${GITHUB_REF#refs/tags/}"       >> "$GITHUB_OUTPUT"
-            echo "app_version=${TAG_VERSION}"              >> "$GITHUB_OUTPUT"
-            echo "prerelease=false"                        >> "$GITHUB_OUTPUT"
-            echo "release_name=Rabbit Coding ${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+            IS_NIGHTLY=false
+            TAG_NAME="${GITHUB_REF#refs/tags/}"
+            APP_VERSION="${TAG_VERSION}"
+            PRERELEASE=false
+            RELEASE_NAME="Rabbit Coding ${TAG_NAME}"
           else
             DATE=$(date -u +%Y%m%d)
             SHORT_SHA=${GITHUB_SHA::7}
-            echo "is_nightly=true"                                              >> "$GITHUB_OUTPUT"
-            echo "tag_name=nightly"                                             >> "$GITHUB_OUTPUT"
-            echo "app_version=${BASE_VERSION}-nightly.${DATE}.${SHORT_SHA}"     >> "$GITHUB_OUTPUT"
-            echo "prerelease=true"                                              >> "$GITHUB_OUTPUT"
-            echo "release_name=Nightly ${DATE} (${SHORT_SHA})"                  >> "$GITHUB_OUTPUT"
+            IS_NIGHTLY=true
+            TAG_NAME="nightly"
+            APP_VERSION="${BASE_VERSION}-nightly.${DATE}.${SHORT_SHA}"
+            PRERELEASE=true
+            RELEASE_NAME="Nightly ${DATE} (${SHORT_SHA})"
+          fi
+
+          echo "is_nightly=${IS_NIGHTLY}"      >> "$GITHUB_OUTPUT"
+          echo "tag_name=${TAG_NAME}"          >> "$GITHUB_OUTPUT"
+          echo "app_version=${APP_VERSION}"    >> "$GITHUB_OUTPUT"
+          echo "prerelease=${PRERELEASE}"      >> "$GITHUB_OUTPUT"
+          echo "release_name=${RELEASE_NAME}"  >> "$GITHUB_OUTPUT"
+
+          # MSI(WiX)要求版本号的预发布段为纯数字且 ≤65535;nightly 版本含日期+sha,
+          # 无法满足该约束,会导致 WiX 打包失败并让整个 tauri build 退出非零码
+          # (连已成功的 nsis 包也发布不出来)。故 nightly 的 Windows 构建只产出 nsis;
+          # tag 正式版预发布段为纯数字,不受此限制,仍正常产出 msi。
+          if [[ "${RUNNER_OS}" == "Windows" && "${IS_NIGHTLY}" == "true" ]]; then
+            echo "bundle_args=--bundles nsis"  >> "$GITHUB_OUTPUT"
+          else
+            echo "bundle_args="                >> "$GITHUB_OUTPUT"
           fi
 
       # ---- 注入版本号(正式=tag,nightly=计算值);nightly 同时把 updater endpoint 指向 nightly tag ----
@@ -180,4 +196,4 @@ jobs:
           releaseDraft: false
           prerelease: ${{ steps.rel.outputs.prerelease }}
           updaterJsonPreferNsis: true
-          args: --target ${{ matrix.target }}
+          args: --target ${{ matrix.target }} ${{ steps.rel.outputs.bundle_args }}
