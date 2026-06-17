@@ -35,6 +35,10 @@ jobs:
             node_asset: win-arm64
 
     runs-on: ${{ matrix.platform }}
+    # tauri-action 需要创建/更新 GitHub Release,必须显式授予 contents: write
+    # 否则默认 GITHUB_TOKEN 权限不足 → "Resource not accessible by integration"
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
