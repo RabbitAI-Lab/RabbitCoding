@@ -292,6 +292,12 @@ async function runQuery(
       maxBudgetUsd: options.maxBudgetUsd,
       thinking: { type: "adaptive" },
       includePartialMessages: true,
+      // SDK 层兜底：不加载任何文件系统 settings。
+      // 主隔离手段是 sidecar.rs 注入的 CLAUDE_CONFIG_DIR（指向应用专用空目录），
+      // 它一刀切断 ~/.claude/ 下的 settings/plugins/skills/agents/commands/hooks
+      // 等全部全局资源。此处 settingSources:[] 作为 SDK 级冗余兜底，
+      // 防止残留的 settings.env 覆盖 BYOK。
+      settingSources: [],
       ...(extraOptions as any),
       ...(NATIVE_CLI_BINARY ? { pathToClaudeCodeExecutable: NATIVE_CLI_BINARY } : {}),
     };

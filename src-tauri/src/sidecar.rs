@@ -93,6 +93,42 @@ pub fn start_sidecar(
     let mut cmd = std::process::Command::new(&sidecar_path.program);
     cmd.args(&sidecar_path.args);
 
+    // 0. 清理从父进程（Tauri app / shell）继承的 ANTHROPIC_* 环境变量。
+    //    确保 sidecar 的模型配置完全由本应用的 BYOK 注入决定，
+    //    不被 shell 环境遗留变量干扰（例如 ANTHROPIC_AUTH_TOKEN 的优先级
+    //    高于 ANTHROPIC_API_KEY，若不清理会压过 BYOK 的 key）。
+    //    settings.json 的 env 字段由 SDK 端 settingSources:[] 隔离。
+    for var in [
+        "ANTHROPIC_AUTH_TOKEN",
+        "ANTHROPIC_API_KEY",
+        "ANTHROPIC_BASE_URL",
+        "ANTHROPIC_MODEL",
+        "ANTHROPIC_DEFAULT_HAIKU_MODEL",
+        "ANTHROPIC_DEFAULT_HAIKU_MODEL_NAME",
+        "ANTHROPIC_DEFAULT_SONNET_MODEL",
+        "ANTHROPIC_DEFAULT_SONNET_MODEL_NAME",
+        "ANTHROPIC_DEFAULT_OPUS_MODEL",
+        "ANTHROPIC_DEFAULT_OPUS_MODEL_NAME",
+        "CLAUDE_CODE_DISABLE_1M_CONTEXT",
+    ] {
+        cmd.env_remove(var);
+    }
+
+    // 0b. 将 Claude Code 配置根目录重定向到应用专用目录，彻底隔离用户全局 ~/.claude/。
+    //     这是阻断 plugins / skills / agents / commands / hooks / marketplace / rules /
+    //     output-styles 等全局资源泄漏进 sidecar 的主手段（这些不受 settingSources 控制，
+    //     只能换配置根目录）。目录初始为空 → 不加载任何用户全局插件/技能/代理；
+    //     Claude Code 在其中维护本应用独立的运行时文件（sessions/projects 等），
+    //     与用户 CLI 完全隔离。
+    let claude_home = match app.path().app_local_data_dir() {
+        Ok(d) => d.join("claude-home"),
+        Err(_) => std::env::var("HOME")
+            .map(|h| std::path::PathBuf::from(h).join(".rabbit-claude-home"))
+            .unwrap_or_else(|_| std::path::PathBuf::from(".rabbit-claude-home")),
+    };
+    let _ = std::fs::create_dir_all(&claude_home);
+    cmd.env("CLAUDE_CONFIG_DIR", &claude_home);
+
     // 1. 主 API Key 环境变量
     cmd.env("ANTHROPIC_API_KEY", &payload.api_key);
 
