@@ -256,22 +256,8 @@ pub fn run() {
                 });
             }
 
-            // 调试：从终端启动（stdout 为 TTY）或设置 RABBIT_DEVTOOLS=1 时，自动打开 DevTools
-            // 用于生产包排查（需 tauri devtools feature）。从终端启动可同时看到 Rust/侧车后端日志。
-            {
-                use std::io::IsTerminal;
-                let is_tty = std::io::stdout().is_terminal();
-                let want_devtools = is_tty
-                    || std::env::var("RABBIT_DEVTOOLS")
-                        .map(|v| !v.is_empty())
-                        .unwrap_or(false);
-                if want_devtools {
-                    if let Some(w) = app.get_webview_window("main") {
-                        let _ = w.open_devtools();
-                        println!("[devtools] opened (isatty={is_tty} or RABBIT_DEVTOOLS)");
-                    }
-                }
-            }
+            // DevTools 默认不在启动时自动打开（避免开发期每次启动弹出）。
+            // 需要调试时按 F12 手动切换；release 构建同样支持（devtools feature 已在 Cargo.toml 中启用）。
 
             // 所有桌面平台开发期：注册所有 scheme 到当前可执行文件
             // macOS 也需要 register_all 来将 scheme 注册到 Launch Services
