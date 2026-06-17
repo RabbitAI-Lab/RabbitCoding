@@ -133,20 +133,31 @@ jobs:
           BASE_VERSION=$(node -p "require('./src-tauri/tauri.conf.json').version")
           if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
             TAG_VERSION="${GITHUB_REF#refs/tags/v}"
-            echo "is_nightly=false"                        >> "$GITHUB_OUTPUT"
-            echo "tag_name=${GITHUB_REF#refs/tags/}"       >> "$GITHUB_OUTPUT"
-            echo "app_version=${TAG_VERSION}"              >> "$GITHUB_OUTPUT"
-            echo "prerelease=false"                        >> "$GITHUB_OUTPUT"
-            echo "release_name=Rabbit Coding ${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+            IS_NIGHTLY=false
+            TAG_NAME="${GITHUB_REF#refs/tags/}"
+            APP_VERSION="${TAG_VERSION}"
+            PRERELEASE=false
+            RELEASE_NAME="Rabbit Coding ${TAG_NAME}"
           else
+            # MSI/WiX 要求版本号预发布段为纯数字且 ≤65535(见 tauri-apps/tauri#5286,
+            # 且不做任何自动转换)。故 nightly 用「距 2024-01-01 的天数」作为预发布段
+            # (纯数字;2026 年约 898,远低于 65535,数百年内不会溢出),使所有平台(含 MSI)
+            # 一次构建通过。日期 + sha 仍保留在下方 Release 标题里。
+            DAYS=$(node -e "console.log(Math.floor((Date.now()-Date.parse('2024-01-01T00:00:00Z'))/86400000))")
             DATE=$(date -u +%Y%m%d)
             SHORT_SHA=${GITHUB_SHA::7}
-            echo "is_nightly=true"                                              >> "$GITHUB_OUTPUT"
-            echo "tag_name=nightly"                                             >> "$GITHUB_OUTPUT"
-            echo "app_version=${BASE_VERSION}-nightly.${DATE}.${SHORT_SHA}"     >> "$GITHUB_OUTPUT"
-            echo "prerelease=true"                                              >> "$GITHUB_OUTPUT"
-            echo "release_name=Nightly ${DATE} (${SHORT_SHA})"                  >> "$GITHUB_OUTPUT"
+            IS_NIGHTLY=true
+            TAG_NAME="nightly"
+            APP_VERSION="${BASE_VERSION}-${DAYS}"
+            PRERELEASE=true
+            RELEASE_NAME="Nightly ${DATE} (${SHORT_SHA})"
           fi
+
+          echo "is_nightly=${IS_NIGHTLY}"      >> "$GITHUB_OUTPUT"
+          echo "tag_name=${TAG_NAME}"          >> "$GITHUB_OUTPUT"
+          echo "app_version=${APP_VERSION}"    >> "$GITHUB_OUTPUT"
+          echo "prerelease=${PRERELEASE}"      >> "$GITHUB_OUTPUT"
+          echo "release_name=${RELEASE_NAME}"  >> "$GITHUB_OUTPUT"
 
       # ---- 注入版本号(正式=tag,nightly=计算值);nightly 同时把 updater endpoint 指向 nightly tag ----
       - name: Inject version & endpoint
