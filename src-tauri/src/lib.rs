@@ -1,6 +1,7 @@
 mod sidecar;
 mod db;
 mod network;
+mod model_test;
 mod gitnexus;
 mod integration;
 mod feedback;
@@ -280,6 +281,7 @@ pub fn run() {
             network::diag_http,
             network::diag_ping,
             network::diag_marketplace,
+            model_test::test_model_connection,
             gitnexus::gitnexus_install,
             gitnexus::gitnexus_uninstall,
             gitnexus::gitnexus_check,

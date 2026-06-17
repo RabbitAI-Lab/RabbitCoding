@@ -358,6 +358,12 @@ const en = {
         envVarRequired: 'Please enter an env var name',
       },
       confirmDelete: 'Are you sure you want to delete this model configuration?',
+      testConnection: 'Test Connection',
+      testing: 'Testing…',
+      testSuccess: 'Connected',
+      testFailed: 'Connection Failed',
+      testLatency: 'Latency',
+      testModelEcho: 'Model',
     },
     agents: {
       title: 'Agents',

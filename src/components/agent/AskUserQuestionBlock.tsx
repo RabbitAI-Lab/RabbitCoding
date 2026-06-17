@@ -31,10 +31,13 @@ export function AskUserQuestionBlock({ message, rabbitId }: AskUserQuestionBlock
   );
 
   const isAnswered = message.answered === true;
+  const isExpired = message.expired === true;
+  // 已回答或已失效均进入只读态（失效后 sidecar 上下文丢失，无法再回答）
+  const readOnly = isAnswered || isExpired;
 
   // 切换选项
   const toggleOption = (questionIdx: number, label: string, multiSelect: boolean) => {
-    if (isAnswered) return;
+    if (readOnly) return;
     setSelectedOptions(prev => {
       const current = new Set(prev[questionIdx] ?? []);
       if (multiSelect) {
@@ -53,7 +56,7 @@ export function AskUserQuestionBlock({ message, rabbitId }: AskUserQuestionBlock
 
   // 提交回答
   const handleSubmit = () => {
-    if (!ws || isAnswered) return;
+    if (!ws || readOnly) return;
     const answers: Record<string, string> = {};
     for (let i = 0; i < message.questions.length; i++) {
       const q = message.questions[i];
@@ -65,7 +68,7 @@ export function AskUserQuestionBlock({ message, rabbitId }: AskUserQuestionBlock
 
   // 取消
   const handleCancel = () => {
-    if (!ws || isAnswered) return;
+    if (!ws || readOnly) return;
     void cancelQuestion(rabbitId, message.requestId);
   };
 
@@ -75,10 +78,10 @@ export function AskUserQuestionBlock({ message, rabbitId }: AskUserQuestionBlock
   return (
     <div className="rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-900/10 my-2 overflow-hidden">
       {/* 头部 */}
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-blue-200 dark:border-blue-800">
-        <HelpCircle size={14} className="shrink-0 text-blue-500 dark:text-blue-400" />
-        <span className="text-xs font-medium text-blue-700 dark:text-blue-300">
-          {isAnswered ? '已回答' : '需要你的输入'}
+      <div className={`flex items-center gap-2 px-3 py-2 border-b ${isExpired ? 'border-gray-200 dark:border-gray-700' : 'border-blue-200 dark:border-blue-800'}`}>
+        <HelpCircle size={14} className={`shrink-0 ${isExpired ? 'text-gray-400 dark:text-gray-500' : 'text-blue-500 dark:text-blue-400'}`} />
+        <span className={`text-xs font-medium ${isExpired ? 'text-gray-500 dark:text-gray-400' : 'text-blue-700 dark:text-blue-300'}`}>
+          {isExpired ? '已失效 · 会话已重启' : isAnswered ? '已回答' : '需要你的输入'}
         </span>
       </div>
 
@@ -91,12 +94,13 @@ export function AskUserQuestionBlock({ message, rabbitId }: AskUserQuestionBlock
             selected={selectedOptions[qi] ?? new Set<string>()}
             userAnswer={message.userAnswers?.[q.question]}
             isAnswered={isAnswered}
+            disabled={readOnly}
             onToggle={(label) => toggleOption(qi, label, q.multiSelect)}
           />
         ))}
 
-        {/* 自定义文本输入（仅未回答时） */}
-        {!isAnswered && (
+        {/* 自定义文本输入（仅未回答且未失效时） */}
+        {!readOnly && (
           <div>
             <textarea
               value={customText}
@@ -109,7 +113,7 @@ export function AskUserQuestionBlock({ message, rabbitId }: AskUserQuestionBlock
         )}
 
         {/* 操作按钮 */}
-        {!isAnswered ? (
+        {!readOnly ? (
           <div className="flex items-center justify-end gap-2">
             <button
               onClick={handleCancel}
@@ -139,12 +143,14 @@ function QuestionItem({
   selected,
   userAnswer,
   isAnswered,
+  disabled,
   onToggle,
 }: {
   question: AskUserQuestionItem;
   selected: Set<string>;
   userAnswer?: string;
   isAnswered: boolean;
+  disabled: boolean;
   onToggle: (label: string) => void;
 }) {
   // 已回答时，高亮用户选择的选项
@@ -173,7 +179,7 @@ function QuestionItem({
             <button
               key={oi}
               onClick={() => onToggle(opt.label)}
-              disabled={isAnswered}
+              disabled={disabled}
               className={`w-full text-left rounded-md border px-2.5 py-1.5 transition-colors ${
                 isUserSelected
                   ? 'border-[#E8702A] dark:border-[#F5824C] bg-[#E8702A]/5 dark:bg-[#F5824C]/10'

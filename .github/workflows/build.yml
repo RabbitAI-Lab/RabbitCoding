@@ -1,13 +1,19 @@
-name: Build Desktop Installers
+name: Build & Release Desktop
 
 on:
   push:
     branches: [main]
+    tags: ['v*']
   workflow_dispatch:
 
 env:
   NODE_VERSION: "22.11.0"
   NODE_OPTIONS: "--max-old-space-size=4096"
+
+# 同一分支/tag 的新推送取消进行中的旧构建,避免 nightly 堆积
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -99,9 +105,6 @@ jobs:
         run: |
           echo "=== resources/sidecar ==="
           ls -lh src-tauri/resources/sidecar/
-          echo "=== resources/node-runtime ==="
-          ls -la src-tauri/resources/node-runtime/
-          # 验证原生二进制存在
           if [ "${{ runner.os }}" = "Windows" ]; then
             test -f src-tauri/resources/sidecar/claude.exe || { echo "ERROR: claude.exe not found"; exit 1; }
           else
@@ -119,35 +122,59 @@ jobs:
           mkdir -p private_keys
           printf '%s\n' "$APPLE_API_KEY_CONTENT" > "private_keys/AuthKey_${APPLE_API_KEY}.p8"
 
-      - name: Build Tauri app
+      # ---- 计算 release 元数据:tag(v*) → 正式;其他(main/手动) → nightly prerelease ----
+      - name: Compute release metadata
+        id: rel
+        shell: bash
+        run: |
+          BASE_VERSION=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            TAG_VERSION="${GITHUB_REF#refs/tags/v}"
+            echo "is_nightly=false"                        >> "$GITHUB_OUTPUT"
+            echo "tag_name=${GITHUB_REF#refs/tags/}"       >> "$GITHUB_OUTPUT"
+            echo "app_version=${TAG_VERSION}"              >> "$GITHUB_OUTPUT"
+            echo "prerelease=false"                        >> "$GITHUB_OUTPUT"
+            echo "release_name=Rabbit Coding ${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+          else
+            DATE=$(date -u +%Y%m%d)
+            SHORT_SHA=${GITHUB_SHA::7}
+            echo "is_nightly=true"                                              >> "$GITHUB_OUTPUT"
+            echo "tag_name=nightly"                                             >> "$GITHUB_OUTPUT"
+            echo "app_version=${BASE_VERSION}-nightly.${DATE}.${SHORT_SHA}"     >> "$GITHUB_OUTPUT"
+            echo "prerelease=true"                                              >> "$GITHUB_OUTPUT"
+            echo "release_name=Nightly ${DATE} (${SHORT_SHA})"                  >> "$GITHUB_OUTPUT"
+          fi
+
+      # ---- 注入版本号(正式=tag,nightly=计算值);nightly 同时把 updater endpoint 指向 nightly tag ----
+      - name: Inject version & endpoint
         env:
+          APP_VERSION: ${{ steps.rel.outputs.app_version }}
+          IS_NIGHTLY: ${{ steps.rel.outputs.is_nightly }}
+          REPO: ${{ github.repository }}
+        run: |
+          node -e "const fs=require('fs');const f='src-tauri/tauri.conf.json';const c=JSON.parse(fs.readFileSync(f,'utf8'));c.version=process.env.APP_VERSION;if(process.env.IS_NIGHTLY==='true'&&c.plugins&&c.plugins.updater){c.plugins.updater.endpoints=['https://github.com/'+process.env.REPO+'/releases/download/nightly/latest.json'];}fs.writeFileSync(f,JSON.stringify(c,null,2));"
+          echo "Injected version: $APP_VERSION (nightly=$IS_NIGHTLY)"
+
+      # ---- 构建 + 发布到 GitHub Releases + 自动生成 latest.json(updater 用)+ 签名 ----
+      - name: Build & publish (tauri-action)
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # updater manifest 签名密钥(客户端校验)
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # Apple 代码签名 + 公证(透传给 tauri build)
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
           APPLE_API_KEY_PATH: ${{ github.workspace }}/private_keys/AuthKey_${{ secrets.APPLE_API_KEY }}.p8
-        run: pnpm tauri build --target ${{ matrix.target }}
-
-      - name: Verify macOS signature (macOS only)
-        if: runner.os == 'macOS'
-        shell: bash
-        run: |
-          APP="src-tauri/target/${{ matrix.target }}/release/bundle/macos/Rabbit Coding.app"
-          if [ -d "$APP" ]; then
-            echo "=== codesign verify ==="
-            codesign --verify --deep --strict --verbose=2 "$APP" || true
-            echo "=== spctl assess ==="
-            spctl -a -t exec -vv "$APP" || true
-          fi
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
         with:
-          name: RabbitCoding-${{ matrix.target }}
-          path: |
-            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.dmg
-            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.app
-            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.msi
-            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.exe
-            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.nsis.zip
-          if-no-files-found: warn
+          tauriScript: pnpm tauri
+          tagName: ${{ steps.rel.outputs.tag_name }}
+          releaseName: ${{ steps.rel.outputs.release_name }}
+          releaseBody: '各平台安装包见下方 Assets。macOS 构建已签名 + 公证。'
+          releaseDraft: false
+          prerelease: ${{ steps.rel.outputs.prerelease }}
+          updaterJsonPreferNsis: true
+          args: --target ${{ matrix.target }}

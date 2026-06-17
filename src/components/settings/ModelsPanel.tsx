@@ -10,6 +10,7 @@ import { useI18n } from '../../i18n/useI18n';
 import { useLocalStorage } from '../../hooks/useLocalStorage';
 import { SettingSection, Toggle } from './settingsShared';
 import ModelEditModal from './ModelEditModal';
+import ModelTestInline from './ModelTestInline';
 import type { ModelConfig } from '../../types';
 
 export default function ModelsPanel() {
@@ -104,6 +105,8 @@ export default function ModelsPanel() {
                       checked={config.enabled}
                       onChange={(v) => handleToggle(config.id, v)}
                     />
+                    {/* 测试连接 */}
+                    <ModelTestInline config={config} />
                     {/* 编辑 */}
                     <button
                       onClick={() => handleEdit(config)}

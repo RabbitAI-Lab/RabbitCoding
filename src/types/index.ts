@@ -250,6 +250,8 @@ export interface AskUserQuestionMessage {
   answered?: boolean;
   /** 前端状态：用户的回答 */
   userAnswers?: Record<string, string>;
+  /** 前端状态：因会话重启已失效（sidecar 上下文丢失，无法再回答） */
+  expired?: boolean;
 }
 
 /** Agent Event 包装结构（从 Rust emit 过来的） */
@@ -322,6 +324,20 @@ export interface ModelConfig {
   createdAt: number;
   /** 上下文窗口大小（tokens），默认 200000 */
   maxContextTokens?: number;
+}
+
+/** 模型连接测试结果（由 test_model_connection 命令返回，字段对齐 Rust 的 camelCase 输出） */
+export interface ModelTestResult {
+  /** 是否连通且鉴权通过、模型可用 */
+  success: boolean;
+  /** HTTP 状态码（网络层失败时为 null） */
+  statusCode: number | null;
+  /** 请求耗时（毫秒） */
+  latencyMs: number | null;
+  /** 服务端回显的 model 字段，用于确认 modelId 被接受 */
+  modelEcho: string | null;
+  /** 友好错误描述（失败时填充） */
+  error: string | null;
 }
 
 // ============================================================

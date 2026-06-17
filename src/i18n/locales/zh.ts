@@ -358,6 +358,12 @@ const zh = {
         envVarRequired: '请输入环境变量名',
       },
       confirmDelete: '确定删除该模型配置？',
+      testConnection: '测试连接',
+      testing: '测试中…',
+      testSuccess: '连接成功',
+      testFailed: '连接失败',
+      testLatency: '延迟',
+      testModelEcho: '模型',
     },
     agents: {
       title: '智能体',

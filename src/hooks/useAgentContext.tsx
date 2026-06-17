@@ -177,6 +177,19 @@ export function AgentProvider({ store, children }: AgentProviderProps) {
         }
       }
     },
+    onSidecarExit: (reason: string) => {
+      // sidecar 进程退出：所有运行中的 query 都不可能再收到终态消息，统一收敛为 error，避免 UI 永久 loading
+      store.resetAllRunningRabbits('error', `会话进程异常退出：${reason}`);
+    },
+    onQueryTimeout: (queryId: string) => {
+      // 看门狗触发：某条 query 长时间无任何 sidecar 消息，判定为静默卡死
+      const ws = store.workspaces.find(w => w.rabbits.some(r => r.id === queryId));
+      if (!ws) return;
+      store.updateRabbitAgent(ws.id, queryId, {
+        status: 'error',
+        error: '会话长时间无响应（超过 10 分钟未收到消息），已自动终止',
+      });
+    },
   });
 
   // 包装 cancelQuery：先标记再发送，延迟清理防止内存泄漏
@@ -186,6 +199,46 @@ export function AgentProvider({ store, children }: AgentProviderProps) {
     setTimeout(() => cancelledQueryIdsRef.current.delete(queryId), 30_000);
     await agent.cancelQuery(queryId);
   }, [agent]);
+
+  // 启动/恢复查询失败时，回滚对应 rabbit 状态为 error，避免 status 永久卡在 running
+  // （调用方在发起查询前已将 status 置为 running，此处兜底收敛失败路径）
+  const rollbackQueryToError = useCallback((queryId: string, err: unknown) => {
+    const ws = store.workspaces.find(w => w.rabbits.some(r => r.id === queryId));
+    if (!ws) return;
+    store.updateRabbitAgent(ws.id, queryId, {
+      status: 'error',
+      error: `查询启动失败：${err instanceof Error ? err.message : String(err)}`,
+    });
+  }, [store]);
+
+  // 包装 startQuery：invoke 失败则回滚 status
+  const startQuery = useCallback(async (
+    queryId: string,
+    prompt: string,
+    cwd: string,
+    agentOptions: AgentQueryOptions,
+  ) => {
+    try {
+      await agent.startQuery(queryId, prompt, cwd, agentOptions);
+    } catch (err) {
+      rollbackQueryToError(queryId, err);
+    }
+  }, [agent, rollbackQueryToError]);
+
+  // 包装 resumeQuery：invoke 失败则回滚 status
+  const resumeQuery = useCallback(async (
+    queryId: string,
+    sessionId: string,
+    prompt: string,
+    cwd: string,
+    agentOptions: AgentQueryOptions,
+  ) => {
+    try {
+      await agent.resumeQuery(queryId, sessionId, prompt, cwd, agentOptions);
+    } catch (err) {
+      rollbackQueryToError(queryId, err);
+    }
+  }, [agent, rollbackQueryToError]);
 
   // 响应 AskUserQuestion 提问
   const respondToQuestion = useCallback(async (
@@ -220,8 +273,8 @@ export function AgentProvider({ store, children }: AgentProviderProps) {
     startSidecar: agent.startSidecar,
     stopSidecar: agent.stopSidecar,
     checkStatus: agent.checkStatus,
-    startQuery: agent.startQuery,
-    resumeQuery: agent.resumeQuery,
+    startQuery,
+    resumeQuery,
     cancelQuery,
     compactQuery: agent.compactQuery,
     respondToQuestion,

@@ -4,6 +4,27 @@ import { useLocalStorage } from './useLocalStorage';
 import { generateId } from '../utils/id';
 import type { Workspace, Rabbit, Repo, AgentMessage, AssistantTextDeltaMessage, AssistantThinkingDeltaMessage } from '../types';
 
+/**
+ * 重启后不可能存在活跃 query 进程，收敛所有「进行中」持久化状态，避免 UI 永久卡在 loading / 转圈。
+ * 仅在持久化数据加载时调用一次：
+ * - status: running → idle（无活跃进程）
+ * - compactionPhase: compacting → null（压缩中断，恢复无压缩态）
+ * - messages: 移除 spec_generating（瞬时占位消息；spec 已完成则由 confirmation 独立展示，中断则应消失）
+ */
+function cleanupInflightState(workspaces: Workspace[]): Workspace[] {
+  return workspaces.map(w => ({
+    ...w,
+    rabbits: w.rabbits.map(r => ({
+      ...r,
+      status: r.status === 'running' ? 'idle' as const : r.status,
+      compactionPhase: r.compactionPhase === 'compacting' ? null : r.compactionPhase,
+      messages: r.messages
+        .filter(m => m.type !== 'spec_generating')
+        .map(m => m.type === 'ask_user_question' && !m.answered ? { ...m, expired: true } : m),
+    })),
+  }));
+}
+
 export function useWorkspaces() {
   // selected IDs 保持 localStorage（小数据，同步读取）
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useLocalStorage<string | null>('rabbit-selected-workspace', null);
@@ -46,7 +67,7 @@ export function useWorkspaces() {
         const json = await invoke<string>('db_load_all');
         const loaded: Workspace[] = json ? JSON.parse(json) : [];
         if (mounted) {
-          setWorkspaces(loaded);
+          setWorkspaces(cleanupInflightState(loaded));
           setDbReady(true);
           setIsLoading(false);
         }
@@ -57,7 +78,7 @@ export function useWorkspaces() {
           const localRaw = localStorage.getItem('rabbit-workspaces');
           const loaded: Workspace[] = localRaw ? JSON.parse(localRaw) : [];
           if (mounted) {
-            setWorkspaces(loaded);
+            setWorkspaces(cleanupInflightState(loaded));
             setDbReady(false);
             setIsLoading(false);
           }
@@ -318,6 +339,21 @@ export function useWorkspaces() {
     ));
   }, [setWorkspaces]);
 
+  // 批量收敛所有 status==='running' 的 rabbit 到目标状态（sidecar 退出/超时兜底用）
+  const resetAllRunningRabbits = useCallback((
+    status: 'idle' | 'error',
+    error?: string,
+  ) => {
+    setWorkspaces(prev => prev.map(w => ({
+      ...w,
+      rabbits: w.rabbits.map(r =>
+        r.status === 'running'
+          ? { ...r, status, ...(error !== undefined ? { error } : {}) }
+          : r,
+      ),
+    })));
+  }, [setWorkspaces]);
+
   // 向 Rabbit 追加一个 Spec 文件路径（函数式更新，去重）
   const appendSpecPath = useCallback((
     workspaceId: string,
@@ -494,6 +530,7 @@ export function useWorkspaces() {
     deleteRepo,
     updateRepo,
     updateRabbitAgent,
+    resetAllRunningRabbits,
     appendSpecPath,
     appendRabbitMessage,
     appendDeltaToLastMessage,

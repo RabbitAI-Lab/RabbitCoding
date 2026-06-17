@@ -6,9 +6,10 @@
  */
 
 import { useEffect, useState } from 'react';
-import { Eye, EyeOff, Plus, Trash2, AlertCircle } from 'lucide-react';
+import { Eye, EyeOff, Plus, Trash2, AlertCircle, Loader2, CheckCircle2, XCircle, Zap } from 'lucide-react';
 import Modal from '../common/Modal';
 import { useI18n } from '../../i18n/useI18n';
+import { useModelTest } from '../../hooks/useModelTest';
 import { generateId } from '../../utils/id';
 import { PROVIDER_PRESETS, getPreset } from '../../constants/providers';
 import type { ModelConfig, ModelProvider } from '../../types';
@@ -70,6 +71,7 @@ export default function ModelEditModal({ open, config, onClose, onSave }: ModelE
   const [form, setForm] = useState<FormState>(() => configToForm(config));
   const [showApiKey, setShowApiKey] = useState(false);
   const [error, setError] = useState('');
+  const { state: testState, runTest, reset: resetTest } = useModelTest();
 
   // open 切换时重新初始化表单
   useEffect(() => {
@@ -77,8 +79,9 @@ export default function ModelEditModal({ open, config, onClose, onSave }: ModelE
       setForm(configToForm(config));
       setShowApiKey(false);
       setError('');
+      resetTest();
     }
-  }, [open, config]);
+  }, [open, config, resetTest]);
 
   /** 厂商切换：自动填充预设 */
   const handleProviderChange = (provider: ModelProvider) => {
@@ -153,6 +156,15 @@ export default function ModelEditModal({ open, config, onClose, onSave }: ModelE
       createdAt: form.createdAt || Date.now(),
     };
     onSave(result);
+  };
+
+  /** 测试连接：用当前草稿参数发起测试（无需先保存） */
+  const handleTest = () => {
+    runTest({
+      baseUrl: form.baseUrl,
+      apiKey: form.apiKey,
+      modelId: form.modelId,
+    });
   };
 
   /** 输入框样式 */
@@ -307,8 +319,51 @@ export default function ModelEditModal({ open, config, onClose, onSave }: ModelE
           </div>
         )}
 
+        {/* 测试连接结果 */}
+        {testState.status === 'success' && testState.result && (
+          <div className="flex items-start gap-2 rounded-lg bg-green-50 dark:bg-green-900/20 px-3 py-2 text-xs text-green-700 dark:text-green-400">
+            <CheckCircle2 size={14} className="mt-0.5 shrink-0" />
+            <div className="flex flex-col gap-0.5">
+              <span className="font-medium">{t('settings.models.testSuccess')}</span>
+              <span className="text-[11px] text-green-600/80 dark:text-green-400/80">
+                {t('settings.models.testLatency')}: {testState.result.latencyMs ?? '-'} ms
+                {testState.result.modelEcho
+                  ? ` · ${t('settings.models.testModelEcho')}: ${testState.result.modelEcho}`
+                  : ''}
+              </span>
+            </div>
+          </div>
+        )}
+        {testState.status === 'error' && (
+          <div className="flex items-start gap-2 rounded-lg bg-red-50 dark:bg-red-900/20 px-3 py-2 text-xs text-red-600 dark:text-red-400">
+            <XCircle size={14} className="mt-0.5 shrink-0" />
+            <div className="flex flex-col">
+              <span className="font-medium">{t('settings.models.testFailed')}</span>
+              {testState.error && (
+                <span className="mt-0.5 whitespace-pre-wrap break-all text-[11px] text-red-500/90 dark:text-red-400/90">
+                  {testState.error}
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Footer */}
-        <div className="flex justify-end gap-2 pt-2 border-t border-gray-100 dark:border-gray-800">
+        <div className="flex items-center gap-2 pt-2 border-t border-gray-100 dark:border-gray-800">
+          <button
+            onClick={handleTest}
+            disabled={testState.status === 'loading'}
+            className="mr-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800 hover:bg-blue-50 dark:hover:bg-blue-900/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {testState.status === 'loading' ? (
+              <Loader2 size={13} className="animate-spin" />
+            ) : (
+              <Zap size={13} />
+            )}
+            {testState.status === 'loading'
+              ? t('settings.models.testing')
+              : t('settings.models.testConnection')}
+          </button>
           <button
             onClick={onClose}
             className="px-4 py-1.5 rounded-lg text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
