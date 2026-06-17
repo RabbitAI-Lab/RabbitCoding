@@ -38,10 +38,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # pnpm 版本由 package.json 的 packageManager 字段(Corepack)统一管理,无需在此重复指定
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
-        with:
-          version: 9
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
