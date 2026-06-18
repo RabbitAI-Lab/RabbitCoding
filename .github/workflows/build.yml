@@ -158,6 +158,7 @@ jobs:
           echo "app_version=${APP_VERSION}"    >> "$GITHUB_OUTPUT"
           echo "prerelease=${PRERELEASE}"      >> "$GITHUB_OUTPUT"
           echo "release_name=${RELEASE_NAME}"  >> "$GITHUB_OUTPUT"
+          echo "bundle_args="                  >> "$GITHUB_OUTPUT"
 
       # ---- 注入版本号(正式=tag,nightly=计算值);nightly 同时把 updater endpoint 指向 nightly tag ----
       - name: Inject version & endpoint
@@ -191,4 +192,4 @@ jobs:
           releaseDraft: false
           prerelease: ${{ steps.rel.outputs.prerelease }}
           updaterJsonPreferNsis: true
-          args: --target ${{ matrix.target }}
+          args: --target ${{ matrix.target }} ${{ steps.rel.outputs.bundle_args }}
