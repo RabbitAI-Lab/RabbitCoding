@@ -1,85 +1,109 @@
-# 修复：打包后 Dock 图标和安装图标未更新
+# 修复 Sender 用量统计弹出面板超出窗口右边界
 
-## 问题背景
+## Context（背景）
 
-用户更新了 `src-tauri/icons/` 目录下的所有图标文件（通过 `tauri icon` 命令从新源图生成），但打包后 macOS Dock 中和 DMG 安装包中仍显示旧的 Tauri 默认图标。
+当侧边栏关闭时，内容区（ContentArea）变宽，Sender footer 中的 ContextIndicator（上下文用量指示器）会更靠近应用窗口右边缘。该组件 hover 后通过通用 `Popover` 组件弹出一个宽度 `240px` 的用量面板。由于 `Popover` 当前的定位逻辑直接使用锚点元素的左边界作为面板 `left`，未做窗口右边界溢出检测，导致 `锚点left + 240px` 超出窗口右边界，面板被裁切/溢出。
 
-经调查，源图标文件本身是**正确的**（icns 包含完整 16x16~512x512@2x 分辨率，MD5 与备份不同）。问题出在 macOS 缓存机制和构建缓存两方面。
+预期结果：弹出面板始终完整显示在窗口内，靠近右边缘时自动左移贴合边缘。
 
-## 根因分析
+## 根因
 
-### 根因 1：macOS LaunchServices 图标缓存（最主要原因）
+文件：`src/components/common/Popover.tsx`（第 20-31 行）
 
-macOS 会**激进缓存** App 图标。当安装同 Bundle Identifier（`com.rabbitai-lab.coding`）的新版本时，Dock / Finder / Launchpad 仍显示缓存的旧图标。即使 App Bundle 内的 icns 文件已正确替换，系统也不会立即刷新。
-
-### 根因 2：Cargo 构建缓存未清理
-
-`build.rs` 中仅有 `cargo:rerun-if-changed=resources`，缺少对 `icons/` 目录的变更监听。增量构建时 Cargo 可能复用上次构建缓存的图标资源。
-
-### 根因 3：Debug 模式不打包图标（说明，非 Bug）
-
-`tauri dev` 生成的 debug bundle 不包含图标资源和 `CFBundleIconFile` 键，这是 Tauri 的正常行为——图标仅在 `tauri build`（release）时打包。
-
-## 解决方案
-
-### 步骤 1：清理 Rust 构建缓存后重新打包
-
-```bash
-cd src-tauri
-cargo clean
-cd ..
-pnpm tauri build
+```js
+useLayoutEffect(() => {
+  if (open && anchorRef.current) {
+    const anchorRect = anchorRef.current.getBoundingClientRect();
+    setPosition({
+      left: anchorRect.left,           // 仅取锚点左边界，未考虑面板宽度是否会溢出右边
+      bottom: window.innerHeight - anchorRect.top + 4,
+    });
+  }
+  ...
+}, [open, anchorRef]);
 ```
 
-这确保图标资源被完全重新打包进 App Bundle。
+`Popover` 被 3 处使用，其中只有 ContextIndicator（位于 footer 右侧）会触发右溢出；SidebarFooter、ModelSelector 位于左侧，不受影响。
 
-### 步骤 2：清理 macOS 图标缓存
+## 修改方案
 
-打包完成后安装新版本前/后，执行以下命令清除系统图标缓存：
+**仅修改一个文件：`src/components/common/Popover.tsx`**
 
-```bash
-# 方法 A：重建 LaunchServices 数据库（推荐）
-/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -kill -seed -lint -r -domain local -domain system -domain user
+在现有定位逻辑基础上，增加"渲染后测量实际宽度 + 边界溢出修正"，并补充窗口 resize 监听：
 
-# 方法 B：手动清除图标缓存文件
-sudo rm -rfv /Library/Caches/com.apple.iconservices.store
-sudo find /private/var/folders/ -name com.apple.dock.iconcache -exec rm -fv {} \;
-sudo find /private/var/folders/ -name com.apple.iconservices -exec rm -rfv {} \;
+1. **初次定位**：保持现有逻辑（基于锚点左边界 + bottom 间距），但重置测量标记。
+2. **渲染后测量修正**：新增一个依赖 `position` 的 `useLayoutEffect`，在面板已渲染（`popoverRef.current` 存在）后测量实际 `offsetWidth`：
+   - 检测右溢出：若 `position.left + width > window.innerWidth - MARGIN`，则 `left = max(MARGIN, innerWidth - width - MARGIN)`
+   - 检测左溢出：若 `position.left < MARGIN`，则 `left = MARGIN`
+   - 用 `measuredRef` 标记确保每次 open 只测量修正一次，避免与 `setPosition` 形成循环
+3. **窗口 resize 监听**：在 open 期间监听 `window.resize`，重新计算锚点位置并触发一次完整的定位+修正流程，使面板跟随窗口尺寸变化始终保持在视口内。
+4. `MARGIN` 取 `8px` 作为安全边距。
 
-# 重启 Dock 和 Finder
-killall Dock
-killall Finder
+### 关键代码结构（示意）
+
+```tsx
+const measuredRef = useRef(false);
+
+// 初次定位
+useLayoutEffect(() => {
+  if (open && anchorRef.current) {
+    measuredRef.current = false;            // 每次打开重置测量标记
+    const anchorRect = anchorRef.current.getBoundingClientRect();
+    setPosition({
+      left: anchorRect.left,
+      bottom: window.innerHeight - anchorRect.top + 4,
+    });
+  }
+  if (!open) setPosition(null);
+}, [open, anchorRef]);
+
+// 渲染后测量实际宽度并修正边界溢出
+useLayoutEffect(() => {
+  if (!position || measuredRef.current || !popoverRef.current) return;
+  measuredRef.current = true;
+  const width = popoverRef.current.offsetWidth;
+  const innerWidth = window.innerWidth;
+  const MARGIN = 8;
+  let newLeft = position.left;
+  if (newLeft + width > innerWidth - MARGIN) {
+    newLeft = Math.max(MARGIN, innerWidth - width - MARGIN);
+  } else if (newLeft < MARGIN) {
+    newLeft = MARGIN;
+  }
+  if (newLeft !== position.left) {
+    setPosition(prev => (prev ? { ...prev, left: newLeft } : prev));
+  }
+}, [position]);
+
+// resize 时重新定位（open 期间）
+useEffect(() => {
+  if (!open) return;
+  const handleResize = () => {
+    if (anchorRef.current) {
+      measuredRef.current = false;
+      const anchorRect = anchorRef.current.getBoundingClientRect();
+      setPosition({
+        left: anchorRect.left,
+        bottom: window.innerHeight - anchorRect.top + 4,
+      });
+    }
+  };
+  window.addEventListener('resize', handleResize);
+  return () => window.removeEventListener('resize', handleResize);
+}, [open, anchorRef]);
 ```
 
-如果以上无效，**重启 Mac** 是最彻底的方式。
+### 影响面评估（零回归）
 
-### 步骤 3（可选改进）：在 build.rs 中添加 icons 变更监听
+- `SidebarFooter`（usage/settings popover）：锚点在左侧，不会触发右溢出分支，行为不变。
+- `ModelSelector`：锚点在 footer 左侧，不会溢出，行为不变。
+- `ContextIndicator`：右溢出时自动左移贴合右边缘，问题修复。
 
-在 `src-tauri/build.rs` 的 `ensure_resources()` 函数末尾添加：
+## 验证方式
 
-```rust
-println!("cargo:rerun-if-changed=icons");
-```
-
-这样图标文件变更时 Cargo 会自动触发重新构建，避免增量构建使用缓存。
-
-## 验证方法
-
-1. 重新打包后，检查 release bundle 中的图标：
-   ```bash
-   # 检查 App 内的 icns 文件
-   APP="src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Rabbit Coding.app"
-   md5 "$APP/Contents/Resources/icon.icns"
-   md5 src-tauri/icons/icon.icns
-   # 两个 MD5 应一致
-   ```
-
-2. 清除缓存后安装新版 DMG，确认 Dock 图标已更新为新图标
-
-3. 如果 Dock 仍显示旧图标，重启 Mac 后再次确认
-
-## 关键文件
-
-- `src-tauri/icons/icon.icns` — macOS App 图标源文件（已正确）
-- `src-tauri/tauri.conf.json` — 图标配置（已正确）
-- `src-tauri/build.rs` — 需添加 icons 变更监听
+1. 启动开发环境：`pnpm dev`（前端）+ Tauri 运行。
+2. **关闭侧边栏**，选中一个 Rabbit 进入会话，鼠标 hover Sender 右下角的圆形用量指示器（ContextIndicator）。
+3. 确认弹出的用量面板（240px 宽）完整显示在窗口内，右边缘不再被裁切。
+4. 打开侧边栏后再次 hover，确认面板仍能正常定位（不溢出场景不受影响）。
+5. 面板打开状态下拖拽缩小窗口宽度，确认面板随 resize 自动左移，保持在视口内。
+6. 回归验证：点击侧边栏底部的用量统计按钮与设置按钮、以及 footer 左侧的 ModelSelector，确认其弹出面板定位正常。

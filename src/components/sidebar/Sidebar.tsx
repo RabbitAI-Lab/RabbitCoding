@@ -12,9 +12,10 @@ interface SidebarProps {
   isPluginMarketActive: boolean;
   onOpenTodo: () => void;
   isTodoActive: boolean;
+  onOpenKnowledgeBase: (workspaceId: string) => void;
 }
 
-export default function Sidebar({ store, onOpenSettings, onOpenPluginMarket, isPluginMarketActive, onOpenTodo, isTodoActive }: SidebarProps) {
+export default function Sidebar({ store, onOpenSettings, onOpenPluginMarket, isPluginMarketActive, onOpenTodo, isTodoActive, onOpenKnowledgeBase }: SidebarProps) {
   const { width, isResizing, handleProps } = useResizable({
     storageKey: 'sidebar-width',
     defaultWidth: 272,
@@ -29,7 +30,7 @@ export default function Sidebar({ store, onOpenSettings, onOpenPluginMarket, isP
       <div data-tauri-drag-region className={`h-[34px] shrink-0 ${titleBarPadding}`} />
 
       <SidebarHeader store={store} />
-      <WorkspaceList store={store} />
+      <WorkspaceList store={store} onOpenKnowledgeBase={onOpenKnowledgeBase} />
       <SidebarFooter onOpenSettings={onOpenSettings} onOpenPluginMarket={onOpenPluginMarket} isPluginMarketActive={isPluginMarketActive} onOpenTodo={onOpenTodo} isTodoActive={isTodoActive} workspaces={store.workspaces} />
 
       {/* 拖拽手柄 */}

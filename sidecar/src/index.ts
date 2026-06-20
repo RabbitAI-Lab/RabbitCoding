@@ -95,6 +95,12 @@ async function handleCommand(msg: InboundMessage): Promise<void> {
  */
 async function main(): Promise<void> {
   log("sidecar starting...");
+  log(`=== Environment ===`);
+  log(`CLAUDE_CONFIG_DIR: ${process.env.CLAUDE_CONFIG_DIR || "(not set)"}`);
+  log(`HOME: ${process.env.HOME || process.env.USERPROFILE || "(not set)"}`);
+  log(`Node: ${process.version} | Platform: ${process.platform}/${process.arch}`);
+  log(`ANTHROPIC_BASE_URL: ${process.env.ANTHROPIC_BASE_URL || "(default)"}`);
+  log(`===================`);
 
   const rl = readline.createInterface({
     input: process.stdin,

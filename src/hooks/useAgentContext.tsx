@@ -173,6 +173,8 @@ export function AgentProvider({ store, children }: AgentProviderProps) {
           // 实时更新当前 turn 的上下文占用（覆盖式更新）
           const usageMsg = message as import('../types').UsageUpdateMessage;
           store.updateRabbitAgent(ws.id, queryId, { currentUsage: usageMsg.usage });
+          // 同时存入 messages 数组，用于 per-turn token 统计显示
+          store.appendRabbitMessage(ws.id, queryId, message);
           break;
         }
       }

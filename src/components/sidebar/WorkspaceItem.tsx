@@ -1,5 +1,5 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
-import { Folder, ChevronRight, ChevronDown, Plus, MoreHorizontal, Settings, Trash2 } from 'lucide-react';
+import { Folder, ChevronRight, ChevronDown, Plus, MoreHorizontal, BookOpen, Trash2 } from 'lucide-react';
 import type { Workspace } from '../../types';
 import RabbitItem from './RabbitItem';
 import AddRabbitForm from './AddRabbitForm';
@@ -30,6 +30,7 @@ interface WorkspaceItemProps {
   onToggleRabbitComplete: (rabbitId: string) => void;
   onStartEditRabbit: (rabbitId: string) => void;
   onTogglePin: (rabbitId: string) => void;
+  onOpenKnowledgeBase: () => void;
 }
 
 const MAX_VISIBLE_RABBITS = 5;
@@ -57,6 +58,7 @@ export default function WorkspaceItem(props: WorkspaceItemProps) {
     onToggleRabbitComplete,
     onStartEditRabbit,
     onTogglePin,
+    onOpenKnowledgeBase,
   } = props;
   const editRef = useRef<HTMLInputElement>(null);
   const [editValue, setEditValue] = useState(workspace.name);
@@ -138,7 +140,7 @@ export default function WorkspaceItem(props: WorkspaceItemProps) {
   }, []);
 
   const dropdownMenuItems: ContextMenuAction[] = [
-    { label: t('sidebar.workspaceItem.workspaceConfig'), action: () => { console.log('workspace config'); setDropdownMenu(null); }, icon: 'settings' },
+    { label: t('sidebar.workspaceItem.knowledgeBase'), action: () => { setDropdownMenu(null); onOpenKnowledgeBase(); }, icon: 'knowledgeBase' },
     { label: t('sidebar.workspaceItem.deleteWorkspace'), action: () => { onDelete(); setDropdownMenu(null); }, danger: true, icon: 'delete' },
   ];
 
@@ -275,7 +277,7 @@ export default function WorkspaceItem(props: WorkspaceItemProps) {
                 <div className="mx-2 my-1 border-t border-gray-300 dark:border-gray-600" />
               )}
               <button
-                className={`flex w-full items-center justify-center gap-2 px-3 py-1.5 text-xs ${
+                className={`flex w-full items-center justify-start gap-2 px-3 py-1.5 text-xs ${
                   item.danger
                     ? 'text-[#EC5B56] hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40'
                     : 'text-gray-700 hover:bg-gray-200 dark:text-gray-300 dark:hover:bg-gray-700'
@@ -285,7 +287,7 @@ export default function WorkspaceItem(props: WorkspaceItemProps) {
                   item.action();
                 }}
               >
-                {item.icon === 'settings' && <Settings size={13} />}
+                {item.icon === 'knowledgeBase' && <BookOpen size={13} />}
                 {item.icon === 'delete' && <Trash2 size={13} />}
                 {item.label}
               </button>

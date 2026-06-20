@@ -16,9 +16,12 @@ interface PopoverProps {
 export default function Popover({ anchorRef, open, onClose, children, ignoredRefs = [], onMouseEnter, onMouseLeave }: PopoverProps) {
   const popoverRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState<{ left: number; bottom: number } | null>(null);
+  // 标记本次 open 是否已完成实际宽度测量与边界溢出修正，避免与 setPosition 形成循环
+  const measuredRef = useRef(false);
 
   useLayoutEffect(() => {
     if (open && anchorRef.current) {
+      measuredRef.current = false;
       const anchorRect = anchorRef.current.getBoundingClientRect();
       setPosition({
         left: anchorRect.left,
@@ -28,6 +31,41 @@ export default function Popover({ anchorRef, open, onClose, children, ignoredRef
     if (!open) {
       setPosition(null);
     }
+  }, [open, anchorRef]);
+
+  // 渲染后测量实际宽度并修正左右边界溢出
+  useLayoutEffect(() => {
+    if (!position || measuredRef.current || !popoverRef.current) return;
+    measuredRef.current = true;
+    const width = popoverRef.current.offsetWidth;
+    const innerWidth = window.innerWidth;
+    const MARGIN = 8;
+    let newLeft = position.left;
+    if (newLeft + width > innerWidth - MARGIN) {
+      newLeft = Math.max(MARGIN, innerWidth - width - MARGIN);
+    } else if (newLeft < MARGIN) {
+      newLeft = MARGIN;
+    }
+    if (newLeft !== position.left) {
+      setPosition(prev => (prev ? { ...prev, left: newLeft } : prev));
+    }
+  }, [position]);
+
+  // open 期间监听窗口尺寸变化，重新定位以保持在视口内
+  useEffect(() => {
+    if (!open) return;
+    const handleResize = () => {
+      if (anchorRef.current) {
+        measuredRef.current = false;
+        const anchorRect = anchorRef.current.getBoundingClientRect();
+        setPosition({
+          left: anchorRect.left,
+          bottom: window.innerHeight - anchorRect.top + 4,
+        });
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
   }, [open, anchorRef]);
 
   const handleClickOutside = useCallback((e: MouseEvent) => {

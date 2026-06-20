@@ -10,7 +10,7 @@ import type { McpServerConfig } from '../types';
 // 类型定义
 // ============================================================
 
-export type PluginId = 'gitnexus' | 'context7' | 'ecc';
+export type PluginId = 'gitnexus' | 'context7' | 'ecc' | 'claudeMem';
 export type PluginInstallStatus = 'idle' | 'installing' | 'installed' | 'error';
 
 export interface PluginState {
@@ -25,6 +25,17 @@ interface EccCheckResult {
 }
 
 interface EccProgress {
+  status: string;
+  message: string;
+  timestamp: number;
+}
+
+interface ClaudeMemCheckResult {
+  installed: boolean;
+  version?: string;
+}
+
+interface ClaudeMemProgress {
   status: string;
   message: string;
   timestamp: number;
@@ -58,6 +69,12 @@ export function usePlugins(): UsePluginReturn {
   const [eccInstallStatus, setEccInstallStatus] = useState<PluginInstallStatus>('idle');
   const [eccInstallMessage, setEccInstallMessage] = useState('');
 
+  const [context7InstallStatus, setContext7InstallStatus] = useState<PluginInstallStatus>('idle');
+
+  const [claudeMemInstalled, setClaudeMemInstalled] = useState(false);
+  const [claudeMemInstallStatus, setClaudeMemInstallStatus] = useState<PluginInstallStatus>('idle');
+  const [claudeMemInstallMessage, setClaudeMemInstallMessage] = useState('');
+
   // ---- ECC 初始化检测 ----
   useEffect(() => {
     let cancelled = false;
@@ -71,6 +88,24 @@ export function usePlugins(): UsePluginReturn {
         }
       } catch (err) {
         console.error('[usePlugins] ecc_check failed:', err);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // ---- claude-mem 初始化检测 ----
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const result = await invoke<ClaudeMemCheckResult>('claude_mem_check');
+        if (cancelled) return;
+        setClaudeMemInstalled(result.installed);
+        if (result.installed) {
+          setClaudeMemInstallStatus('installed');
+        }
+      } catch (err) {
+        console.error('[usePlugins] claude_mem_check failed:', err);
       }
     })();
     return () => { cancelled = true; };
@@ -99,6 +134,29 @@ export function usePlugins(): UsePluginReturn {
     };
   }, []);
 
+  // ---- 监听 claude-mem 安装进度事件 ----
+  useEffect(() => {
+    let unlistenFn: UnlistenFn | null = null;
+    listen<ClaudeMemProgress>('claude-mem-install-progress', (event) => {
+      const { status, message } = event.payload;
+      if (status === 'running') {
+        setClaudeMemInstallStatus('installing');
+        setClaudeMemInstallMessage(message);
+      } else if (status === 'done') {
+        setClaudeMemInstallStatus('installed');
+        setClaudeMemInstalled(true);
+        setClaudeMemInstallMessage(message);
+      } else if (status === 'error') {
+        setClaudeMemInstallStatus('error');
+        setClaudeMemInstallMessage(message);
+      }
+    }).then(fn => { unlistenFn = fn; });
+
+    return () => {
+      if (unlistenFn) unlistenFn();
+    };
+  }, []);
+
   // ---- 构建 pluginStates ----
   const gitnexusInstalled = gitnexusAvailable?.installed ?? false;
   const context7Installed = isContext7Installed(mcpConfigs);
@@ -111,12 +169,18 @@ export function usePlugins(): UsePluginReturn {
     },
     context7: {
       installed: context7Installed,
-      status: context7Installed ? 'installed' : 'idle',
+      status: context7InstallStatus === 'installing' ? 'installing' : (context7Installed ? 'installed' : 'idle'),
+      message: context7InstallStatus === 'installing' ? 'Reconfiguring MCP server...' : undefined,
     },
     ecc: {
       installed: eccInstalled,
       status: eccInstallStatus,
       message: eccInstallMessage,
+    },
+    claudeMem: {
+      installed: claudeMemInstalled,
+      status: claudeMemInstallStatus,
+      message: claudeMemInstallMessage,
     },
   };
 
@@ -128,8 +192,8 @@ export function usePlugins(): UsePluginReturn {
     }
 
     if (id === 'context7') {
-      // 检查是否已存在
-      if (isContext7Installed(mcpConfigs)) return;
+      // 重新安装：先显示 installing 状态，再移除旧配置写入新配置
+      setContext7InstallStatus('installing');
       const newConfig: McpServerConfig = {
         id: generateId(),
         name: 'context7',
@@ -139,7 +203,15 @@ export function usePlugins(): UsePluginReturn {
         enabled: true,
         createdAt: Date.now(),
       };
-      setMcpConfigs(prev => [...prev, newConfig]);
+      setMcpConfigs(prev => [
+        ...prev.filter(c =>
+          !c.args?.includes('@upstash/context7-mcp') &&
+          !c.name.toLowerCase().includes('context7'),
+        ),
+        newConfig,
+      ]);
+      // 短暂延迟后恢复为已安装状态（给用户视觉反馈）
+      setTimeout(() => setContext7InstallStatus('installed'), 600);
       return;
     }
 
@@ -152,6 +224,19 @@ export function usePlugins(): UsePluginReturn {
       } catch (err) {
         setEccInstallStatus('error');
         setEccInstallMessage(String(err));
+      }
+      return;
+    }
+
+    if (id === 'claudeMem') {
+      setClaudeMemInstallStatus('installing');
+      setClaudeMemInstallMessage('');
+      try {
+        await invoke('claude_mem_install');
+        // done 事件会更新状态，这里保底
+      } catch (err) {
+        setClaudeMemInstallStatus('error');
+        setClaudeMemInstallMessage(String(err));
       }
       return;
     }
@@ -185,6 +270,19 @@ export function usePlugins(): UsePluginReturn {
       } catch (err) {
         console.error('[usePlugins] ecc_uninstall failed:', err);
         setEccInstallMessage(String(err));
+      }
+      return;
+    }
+
+    if (id === 'claudeMem') {
+      try {
+        await invoke('claude_mem_uninstall');
+        setClaudeMemInstalled(false);
+        setClaudeMemInstallStatus('idle');
+        setClaudeMemInstallMessage('');
+      } catch (err) {
+        console.error('[usePlugins] claude_mem_uninstall failed:', err);
+        setClaudeMemInstallMessage(String(err));
       }
       return;
     }

@@ -13,7 +13,7 @@ import RightPanel from './RightPanel';
 import AgentChat from './agent/AgentChat';
 import ApiKeyModal from './settings/ApiKeyModal';
 import Modal from './common/Modal';
-import type { AgentQueryOptions, AgentMessage, UserMessage, ModelConfig, ProxyConfig, Repo, SpecGeneratingMessage, SpecConfirmationMessage } from '../types';
+import type { AgentQueryOptions, AgentMessage, UserMessage, ModelConfig, ProxyConfig, Repo, SpecGeneratingMessage, SpecConfirmationMessage, KnowledgeBaseConfig } from '../types';
 import { invoke } from '@tauri-apps/api/core';
 import { useI18n } from '../i18n/useI18n';
 import { useTheme } from '../hooks/useTheme';
@@ -43,14 +43,33 @@ export default function ContentArea({ store, onOpenSettings }: ContentAreaProps)
   // 模型配置：从 localStorage 动态读取
   const [modelConfigs] = useLocalStorage<ModelConfig[]>('model-configs', []);
   const [selectedModelConfigId, setSelectedModelConfigId] = useLocalStorage<string>('selected-model-config-id', '');
+  const [knowledgeBaseConfigs] = useLocalStorage<Record<string, KnowledgeBaseConfig>>('knowledge-base-configs', {});
   const [specEnabled, setSpecEnabled] = useState(false);
   const [specTabSignal, setSpecTabSignal] = useState(0);
-  const [rightPanelVisible, setRightPanelVisible] = useLocalStorage<boolean>('right-panel-visible', false);
+  const [rightPanelVisible, setRightPanelVisible] = useState(false);
   const [rightPanelMaximized, setRightPanelMaximized] = useState(false);
   const [apiKeyModalOpen, setApiKeyModalOpen] = useState(false);
     const [noModelOpen, setNoModelOpen] = useState(false);
   // 存储当前待发送的查询，sidecar 就绪后自动发送
   const pendingQueryRef = useRef<(() => void) | null>(null);
+
+  // 跟踪 IME 输入法刚结束的状态
+  // macOS WebKit 下 compositionend 先于 keydown(Enter) 触发，导致 isComposing 已变 false
+  // 通过监听 compositionend 并延迟重置，让后续的 Enter keydown 仍能检测到 IME 刚结束
+  const imeJustComposedRef = useRef(false);
+
+  useEffect(() => {
+    const handleCompositionEnd = () => {
+      imeJustComposedRef.current = true;
+      // 延迟重置：确保同一事件循环中紧跟的 Enter keydown 能检测到
+      const timer = window.setTimeout(() => {
+        imeJustComposedRef.current = false;
+      }, 200);
+      return () => window.clearTimeout(timer);
+    };
+    document.addEventListener('compositionend', handleCompositionEnd, true);
+    return () => document.removeEventListener('compositionend', handleCompositionEnd, true);
+  }, []);
   const [apiKey, setApiKey] = useLocalStorage<string>('anthropic-api-key', '');
   // 网络代理配置
   const [proxyConfig] = useLocalStorage<ProxyConfig>('proxy-config', DEFAULT_PROXY_CONFIG);
@@ -65,6 +84,18 @@ export default function ContentArea({ store, onOpenSettings }: ContentAreaProps)
   });
   const selectedWorkspace = store.workspaces.find(p => p.id === store.selectedWorkspaceId);
   const selectedRabbit = selectedWorkspace?.rabbits.find(r => r.id === store.selectedRabbitId);
+
+  const withKnowledgeBaseReference = useCallback((prompt: string) => {
+    if (!selectedWorkspace?.id || !selectedWorkspace.path) return prompt;
+    const config = knowledgeBaseConfigs[selectedWorkspace.id];
+    if (!config?.referenceEnabled) return prompt;
+
+    const codeWikiDir = `${selectedWorkspace.path}/.rabbit/codewiki`;
+    return `${prompt}
+
+Knowledge base reference:
+The workspace Code Wiki is enabled at ${codeWikiDir}. When useful for the task, search and read files in that directory with the available filesystem tools before answering or editing code. Treat those files as project context and cite paths when relying on them.`;
+  }, [knowledgeBaseConfigs, selectedWorkspace?.id, selectedWorkspace?.path]);
 
   // 派生：模型选择器选项（仅 enabled 的模型）
   const modelOptions: ModelOption[] = useMemo(
@@ -262,6 +293,8 @@ export default function ContentArea({ store, onOpenSettings }: ContentAreaProps)
       return;
     }
 
+    const agentPrompt = withKnowledgeBaseReference(trimmed);
+
     if (selectedRabbit && selectedRabbit.sessionId) {
       // Follow-up：恢复已有会话
       const wsId = selectedWorkspace.id;
@@ -288,10 +321,10 @@ export default function ContentArea({ store, onOpenSettings }: ContentAreaProps)
           store.appendRabbitMessage(wsId, rId, generatingMsg);
           const fallbackCoding = () => {
             store.updateRabbitAgent(wsId, rId, { status: 'running' });
-            agent.resumeQuery(rId, selectedRabbit.sessionId!, trimmed, cwd, options);
+            agent.resumeQuery(rId, selectedRabbit.sessionId!, agentPrompt, cwd, options);
           };
           invoke('ensure_rabbit_specs_dir', { path: cwd }).then(() => {
-            generateSpec(agent.startQuery, trimmed, specFilePath, cwd, model, (msg: AgentMessage) => {
+            generateSpec(agent.startQuery, agentPrompt, specFilePath, cwd, model, (msg: AgentMessage) => {
               handleSpecStream(wsId, rId, msg);
             }).then(({ content: specContent, sessionId: specSessionId, specFilePath: actualSpecFilePath }) => {
               console.log('[ContentArea] generateSpec resolved (follow-up):', { hasContent: !!specContent, actualSpecFilePath, fallbackSpecFilePath: specFilePath });
@@ -299,7 +332,7 @@ export default function ContentArea({ store, onOpenSettings }: ContentAreaProps)
                 const finalSpecFilePath = actualSpecFilePath || specFilePath;
                 const finalFileName = finalSpecFilePath.split('/').pop() || fileName;
                 console.log('[ContentArea] Setting specFilePath on rabbit:', rId, finalSpecFilePath);
-                pendingCodingQueryRef.current.set(rId, { prompt: trimmed, cwd, model, specSessionId: specSessionId ?? undefined });
+                pendingCodingQueryRef.current.set(rId, { prompt: agentPrompt, cwd, model, specSessionId: specSessionId ?? undefined });
                 store.updateRabbitAgent(wsId, rId, { status: 'idle' });
                 store.appendSpecPath(wsId, rId, finalSpecFilePath);
                 const specMsg: SpecConfirmationMessage = {
@@ -317,7 +350,7 @@ export default function ContentArea({ store, onOpenSettings }: ContentAreaProps)
             }).catch(() => { fallbackCoding(); });
           }).catch(() => { fallbackCoding(); });
         } else {
-          agent.resumeQuery(rId, selectedRabbit.sessionId!, trimmed, cwd, options);
+          agent.resumeQuery(rId, selectedRabbit.sessionId!, agentPrompt, cwd, options);
         }
       });
     } else {
@@ -347,10 +380,10 @@ export default function ContentArea({ store, onOpenSettings }: ContentAreaProps)
           store.appendRabbitMessage(wsId, rabbitId, generatingMsg);
           const fallbackCoding = () => {
             store.updateRabbitAgent(wsId, rabbitId, { status: 'running' });
-            agent.startQuery(rabbitId, trimmed, cwd, options);
+            agent.startQuery(rabbitId, agentPrompt, cwd, options);
           };
           invoke('ensure_rabbit_specs_dir', { path: cwd }).then(() => {
-            generateSpec(agent.startQuery, trimmed, specFilePath, cwd, model, (msg: AgentMessage) => {
+            generateSpec(agent.startQuery, agentPrompt, specFilePath, cwd, model, (msg: AgentMessage) => {
               handleSpecStream(wsId, rabbitId, msg);
             }).then(({ content: specContent, sessionId: specSessionId, specFilePath: actualSpecFilePath }) => {
               console.log('[ContentArea] generateSpec resolved (new rabbit):', { hasContent: !!specContent, actualSpecFilePath, fallbackSpecFilePath: specFilePath });
@@ -358,7 +391,7 @@ export default function ContentArea({ store, onOpenSettings }: ContentAreaProps)
                 const finalSpecFilePath = actualSpecFilePath || specFilePath;
                 const finalFileName = finalSpecFilePath.split('/').pop() || fileName;
                 console.log('[ContentArea] Setting specFilePath on rabbit:', rabbitId, finalSpecFilePath);
-                pendingCodingQueryRef.current.set(rabbitId, { prompt: trimmed, cwd, model, specSessionId: specSessionId ?? undefined });
+                pendingCodingQueryRef.current.set(rabbitId, { prompt: agentPrompt, cwd, model, specSessionId: specSessionId ?? undefined });
                 store.updateRabbitAgent(wsId, rabbitId, { status: 'idle' });
                 store.appendSpecPath(wsId, rabbitId, finalSpecFilePath);
                 const specMsg: SpecConfirmationMessage = {
@@ -376,15 +409,26 @@ export default function ContentArea({ store, onOpenSettings }: ContentAreaProps)
             }).catch(() => { fallbackCoding(); });
           }).catch(() => { fallbackCoding(); });
         } else {
-          agent.startQuery(rabbitId, trimmed, cwd, options);
+          agent.startQuery(rabbitId, agentPrompt, cwd, options);
         }
       });
     }
     setSenderValue('');
-  }, [selectedWorkspace, selectedRabbit, effectiveModel, store, agent, ensureSidecarAndQuery, modelOptions, specEnabled]);
+  }, [selectedWorkspace, selectedRabbit, effectiveModel, store, agent, ensureSidecarAndQuery, modelOptions, specEnabled, withKnowledgeBaseReference]);
 
   const handleChange = useCallback((value: string) => {
     setSenderValue(value);
+  }, []);
+
+  // 中文输入法正在输入时，回车用于确认候选词，不发送消息
+  const handleSenderKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      // IME 刚结束组合（compositionend 刚触发）或仍在组合中 → 阻止发送
+      if (imeJustComposedRef.current || e.nativeEvent.isComposing) {
+        imeJustComposedRef.current = false;
+        return false;
+      }
+    }
   }, []);
 
   /** 手动触发会话压缩 */
@@ -459,6 +503,7 @@ export default function ContentArea({ store, onOpenSettings }: ContentAreaProps)
                   value={senderValue}
                   onChange={handleChange}
                   onSubmit={handleSubmit}
+                  onKeyDown={handleSenderKeyDown}
                   loading={selectedRabbit?.status === 'running'}
                   onCancel={() => {
                     if (selectedRabbit) {
@@ -515,7 +560,7 @@ export default function ContentArea({ store, onOpenSettings }: ContentAreaProps)
                         {selectedRabbit?.status === 'running' ? (
                           <LoadingButton style={{ width: 22, height: 22, minWidth: 22, fontSize: 12, padding: 0, backgroundColor: sendBtnBg, color: sendBtnColor, border: 'none' }} />
                         ) : (
-                          <SendButton style={{ width: 22, height: 22, minWidth: 22, backgroundColor: sendBtnBg, color: sendBtnColor, border: 'none' }} />
+                          <SendButton style={{ width: 22, height: 22, minWidth: 22, fontSize: 12, padding: 0, backgroundColor: sendBtnBg, color: sendBtnColor, border: 'none' }} />
                         )}
                       </div>
                     </div>
@@ -541,6 +586,7 @@ export default function ContentArea({ store, onOpenSettings }: ContentAreaProps)
                   value={senderValue}
                   onChange={handleChange}
                   onSubmit={handleSubmit}
+                  onKeyDown={handleSenderKeyDown}
                   placeholder={t('contentArea.inputPlaceholder')}
                   autoSize={{ minRows: 1, maxRows: 4 }}
                   suffix={false}
@@ -574,7 +620,7 @@ export default function ContentArea({ store, onOpenSettings }: ContentAreaProps)
                           }}
                         />
                       </div>
-                      <SendButton style={{ width: 22, height: 22, minWidth: 22, backgroundColor: sendBtnBg, color: sendBtnColor, border: 'none' }} />
+                      <SendButton style={{ width: 22, height: 22, minWidth: 22, fontSize: 12, padding: 0, backgroundColor: sendBtnBg, color: sendBtnColor, border: 'none' }} />
                     </div>
                   )}
                 />

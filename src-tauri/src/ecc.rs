@@ -1,8 +1,13 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::io::{BufRead, BufReader};
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{command, AppHandle, Emitter};
+
+// 复用 claude_mem.rs 的共享辅助函数，保证 CLAUDE_CONFIG_DIR 注入逻辑
+// 与 sidecar.rs 完全一致，插件装到应用专用目录而非全局 ~/.claude
+use crate::claude_mem::{claude_command, find_claude, get_claude_config_dir};
 
 // ============================================================
 // 数据结构
@@ -23,6 +28,18 @@ pub struct EccProgress {
     pub timestamp: u64,
 }
 
+/// installed_plugins.json 的最小化反序列化结构（只需检测键是否存在 + 取版本）
+#[derive(Debug, Deserialize)]
+struct InstalledPluginsFile {
+    #[serde(default)]
+    plugins: HashMap<String, Vec<PluginInstallEntry>>,
+}
+
+#[derive(Debug, Deserialize)]
+struct PluginInstallEntry {
+    version: Option<String>,
+}
+
 // ============================================================
 // 辅助函数
 // ============================================================
@@ -34,192 +51,15 @@ fn now_ms() -> u64 {
         .as_millis() as u64
 }
 
-/// 获取 Claude 配置目录 (通常 ~/.claude 或 %USERPROFILE%\.claude)
-fn get_claude_dir() -> Option<std::path::PathBuf> {
-    #[cfg(target_os = "windows")]
-    {
-        let home = std::env::var("USERPROFILE").ok()?;
-        Some(std::path::PathBuf::from(home).join(".claude"))
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        let home = std::env::var("HOME").ok()?;
-        Some(std::path::PathBuf::from(home).join(".claude"))
-    }
+/// 判断插件键名是否属于 ECC（兼容 ecc@ecc、everything-claude-code@* 等历史键名）
+fn is_ecc_plugin_key(key: &str) -> bool {
+    let plugin_name = key.split('@').next().unwrap_or(key).to_lowercase();
+    plugin_name == "ecc" || plugin_name == "everything-claude-code"
 }
 
-/// 查找 npx（跨平台）
-fn find_npx() -> Option<(String, Vec<String>)> {
-    // 跨平台 npx 命令名
-    #[cfg(target_os = "windows")]
-    let npx_cmd = "npx.cmd";
-    #[cfg(not(target_os = "windows"))]
-    let npx_cmd = "npx";
-
-    // 直接尝试 npx
-    let direct = Command::new(npx_cmd).arg("--version").output();
-    if let Ok(out) = &direct {
-        if out.status.success() {
-            return Some((npx_cmd.into(), vec![]));
-        }
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-        // Windows: 尝试通过 cmd 找 npx
-        let shell_check = Command::new("cmd")
-            .arg("/C")
-            .arg("where npx 2>nul")
-            .output();
-        if let Ok(o) = &shell_check {
-            if o.status.success() {
-                let path = String::from_utf8_lossy(&o.stdout)
-                    .lines()
-                    .next()
-                    .unwrap_or("")
-                    .trim()
-                    .to_string();
-                if !path.is_empty() && std::path::Path::new(&path).exists() {
-                    return Some((path, vec![]));
-                }
-            }
-        }
-
-        // 尝试常见路径
-        let mut candidates: Vec<String> = Vec::new();
-        if let Ok(appdata) = std::env::var("APPDATA") {
-            candidates.push(format!("{}\\npm\\npx.cmd", appdata));
-        }
-        if let Ok(programfiles) = std::env::var("PROGRAMFILES") {
-            candidates.push(format!("{}\\nodejs\\npx.cmd", programfiles));
-        }
-        for candidate in &candidates {
-            if std::path::Path::new(candidate).exists() {
-                return Some((candidate.clone(), vec![]));
-            }
-        }
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    {
-        // macOS / Linux: 尝试通过 shell 找 npx
-        let shell_check = Command::new("sh")
-            .arg("-c")
-            .arg("which npx 2>/dev/null")
-            .output();
-        if let Ok(o) = &shell_check {
-            if o.status.success() {
-                let path = String::from_utf8_lossy(&o.stdout).trim().to_string();
-                if !path.is_empty() && std::path::Path::new(&path).exists() {
-                    return Some((path, vec![]));
-                }
-            }
-        }
-
-        // 尝试常见路径
-        let mut candidates: Vec<String> = vec![
-            "/usr/local/bin/npx".into(),
-            "/opt/homebrew/bin/npx".into(),
-        ];
-        if let Ok(home) = std::env::var("HOME") {
-            candidates.push(format!("{}/.npm-global/bin/npx", home));
-            candidates.push(format!("{}/.local/bin/npx", home));
-            candidates.push(format!("{}/.volta/bin/npx", home));
-            candidates.push(format!("{}/.bun/bin/npx", home));
-        }
-        for candidate in &candidates {
-            if std::path::Path::new(candidate).exists() {
-                return Some((candidate.clone(), vec![]));
-            }
-        }
-    }
-
-    None
-}
-
-// ============================================================
-// Tauri Commands
-// ============================================================
-
-/// 检测 ECC 是否已安装
-#[command]
-pub async fn ecc_check() -> Result<EccCheckResult, String> {
-    let claude_dir = get_claude_dir().ok_or_else(|| "Cannot determine HOME directory".to_string())?;
-
-    // 检测 agents 目录下是否有 ECC 相关文件
-    let agents_dir = claude_dir.join("agents");
-    let mut found_ecc_agent = false;
-
-    if let Ok(entries) = std::fs::read_dir(&agents_dir) {
-        for entry in entries.flatten() {
-            let name = entry.file_name();
-            let name_str = name.to_string_lossy();
-            // ECC 安装的 agent 文件通常包含 "ecc-" 前缀或已知角色名
-            if name_str.contains("ecc") || name_str.contains("typescript-reviewer")
-                || name_str.contains("build-resolver") || name_str.contains("kotlin-reviewer")
-            {
-                found_ecc_agent = true;
-                break;
-            }
-        }
-    }
-
-    // 检测 skills 目录
-    let skills_dir = claude_dir.join("skills");
-    let mut found_ecc_skill = false;
-
-    if let Ok(entries) = std::fs::read_dir(&skills_dir) {
-        for entry in entries.flatten() {
-            let name = entry.file_name();
-            let name_str = name.to_string_lossy();
-            if name_str.contains("ecc") || name_str.contains("configure-ecc")
-                || name_str.contains("market-research") || name_str.contains("article-writing")
-            {
-                found_ecc_skill = true;
-                break;
-            }
-        }
-    }
-
-    // 检测 ECC 状态存储 (ecc2 目录 或 state store)
-    let ecc2_dir = claude_dir.join("ecc2");
-    let state_store = claude_dir.join("state-store");
-
-    let installed = found_ecc_agent || found_ecc_skill || ecc2_dir.exists() || state_store.exists();
-
-    // 尝试读取版本（如果 ecc2 存在）
-    let version = if ecc2_dir.exists() {
-        Some("2.0.0".to_string())
-    } else if installed {
-        Some("1.x".to_string())
-    } else {
-        None
-    };
-
-    Ok(EccCheckResult { installed, version })
-}
-
-/// 一键安装 ECC（npx ecc-install --profile minimal）
-/// 后台执行，实时 emit 安装进度
-#[command]
-pub async fn ecc_install(app: AppHandle) -> Result<bool, String> {
-    tokio::task::spawn_blocking(move || {
-        let (program, prefix) = find_npx().ok_or_else(|| {
-            "npx not found. Please install Node.js first from https://nodejs.org".to_string()
-        })?;
-
-        let mut cmd = Command::new(&program);
-        for a in &prefix {
-            cmd.arg(a);
-        }
-        cmd.args(&["-y", "ecc-install", "--profile", "minimal", "--target", "claude"]);
-        cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
-
-        let mut child = cmd.spawn().map_err(|e| format!("Failed to spawn: {}", e))?;
-        let stdout = child.stdout.take().expect("stdout");
-        let stderr = child.stderr.take().expect("stderr");
-
-        // stdout 进度线程
+/// 读取子进程 stdout/stderr 并实时 emit 进度（与 claude_mem.rs 一致的双线程模式）
+fn emit_child_output(app: &AppHandle, child: &mut std::process::Child) {
+    if let Some(stdout) = child.stdout.take() {
         let app_out = app.clone();
         std::thread::spawn(move || {
             let reader = BufReader::new(stdout);
@@ -239,8 +79,9 @@ pub async fn ecc_install(app: AppHandle) -> Result<bool, String> {
                 }
             }
         });
+    }
 
-        // stderr 进度线程
+    if let Some(stderr) = child.stderr.take() {
         let app_err = app.clone();
         std::thread::spawn(move || {
             let reader = BufReader::new(stderr);
@@ -260,10 +101,157 @@ pub async fn ecc_install(app: AppHandle) -> Result<bool, String> {
                 }
             }
         });
+    }
+}
 
-        let status = child.wait().map_err(|e| format!("Wait failed: {}", e))?;
+// ============================================================
+// Tauri Commands
+// ============================================================
 
-        if status.success() {
+/// 检测 ECC 是否已安装
+/// 策略：读取 {CLAUDE_CONFIG_DIR}/plugins/installed_plugins.json，
+///       匹配键名为 ecc 或 everything-claude-code（兼容历史记录）
+#[command]
+pub async fn ecc_check(app: AppHandle) -> Result<EccCheckResult, String> {
+    let config_dir = get_claude_config_dir(&app);
+    let installed_json = config_dir.join("plugins").join("installed_plugins.json");
+
+    if !installed_json.exists() {
+        return Ok(EccCheckResult {
+            installed: false,
+            version: None,
+        });
+    }
+
+    let content = std::fs::read_to_string(&installed_json)
+        .map_err(|e| format!("Failed to read installed_plugins.json: {}", e))?;
+
+    let parsed: InstalledPluginsFile = match serde_json::from_str(&content) {
+        Ok(p) => p,
+        Err(_) => {
+            return Ok(EccCheckResult {
+                installed: false,
+                version: None,
+            });
+        }
+    };
+
+    let mut found_version: Option<String> = None;
+    let installed = parsed.plugins.keys().any(|key| {
+        if is_ecc_plugin_key(key) {
+            if let Some(entries) = parsed.plugins.get(key) {
+                if let Some(first) = entries.first() {
+                    if let Some(ref v) = first.version {
+                        found_version = Some(v.clone());
+                    }
+                }
+            }
+            true
+        } else {
+            false
+        }
+    });
+
+    Ok(EccCheckResult {
+        installed,
+        version: found_version,
+    })
+}
+
+/// 一键安装 ECC（通过 Claude CLI 插件机制）
+/// 两步：marketplace add → plugin install（失败则降级重试 plugin@marketplace）
+/// 后台执行，实时 emit "ecc-install-progress" 事件
+#[command]
+pub async fn ecc_install(app: AppHandle) -> Result<bool, String> {
+    tokio::task::spawn_blocking(move || {
+        let (program, _prefix) = find_claude().ok_or_else(|| {
+            "claude CLI not found. Please install Claude Code CLI first from https://claude.ai"
+                .to_string()
+        })?;
+
+        let config_dir = get_claude_config_dir(&app);
+        // 确保配置目录存在
+        let _ = std::fs::create_dir_all(&config_dir);
+
+        // ---------- 第一步：添加市场源 ----------
+        let _ = app.emit(
+            "ecc-install-progress",
+            EccProgress {
+                status: "running".into(),
+                message: "Adding marketplace source (affaan-m/ECC)...".into(),
+                timestamp: now_ms(),
+            },
+        );
+
+        let mut cmd1 = claude_command(&program, &config_dir);
+        cmd1.args([
+            "plugin",
+            "marketplace",
+            "add",
+            "https://github.com/affaan-m/ECC",
+            "--scope",
+            "user",
+        ]);
+        cmd1.stdout(Stdio::piped()).stderr(Stdio::piped());
+
+        let mut child1 = cmd1
+            .spawn()
+            .map_err(|e| format!("Failed to spawn marketplace add: {}", e))?;
+
+        emit_child_output(&app, &mut child1);
+
+        let status1 = child1
+            .wait()
+            .map_err(|e| format!("Wait marketplace add failed: {}", e))?;
+
+        // marketplace add 可能返回非零（市场已存在），不视为致命错误
+        if !status1.success() {
+            let _ = app.emit(
+                "ecc-install-progress",
+                EccProgress {
+                    status: "running".into(),
+                    message: "Marketplace may already exist, continuing to install...".into(),
+                    timestamp: now_ms(),
+                },
+            );
+        }
+
+        // ---------- 第二步：安装插件 ----------
+        let _ = app.emit(
+            "ecc-install-progress",
+            EccProgress {
+                status: "running".into(),
+                message: "Installing ECC plugin...".into(),
+                timestamp: now_ms(),
+            },
+        );
+
+        let mut cmd2 = claude_command(&program, &config_dir);
+        cmd2.args(["plugin", "install", "ecc", "-s", "user"]);
+        cmd2.stdout(Stdio::piped()).stderr(Stdio::piped());
+
+        let mut child2 = match cmd2.spawn() {
+            Ok(c) => c,
+            Err(e) => {
+                let _ = app.emit(
+                    "ecc-install-progress",
+                    EccProgress {
+                        status: "error".into(),
+                        message: format!("Failed to spawn install: {}", e),
+                        timestamp: now_ms(),
+                    },
+                );
+                return Err(format!("Failed to spawn install: {}", e));
+            }
+        };
+
+        emit_child_output(&app, &mut child2);
+
+        let status2 = child2
+            .wait()
+            .map_err(|e| format!("Wait install failed: {}", e))?;
+
+        if status2.success() {
             let _ = app.emit(
                 "ecc-install-progress",
                 EccProgress {
@@ -274,81 +262,92 @@ pub async fn ecc_install(app: AppHandle) -> Result<bool, String> {
             );
             Ok(true)
         } else {
+            // 降级重试：尝试 ecc@ecc 精确指定市场
             let _ = app.emit(
                 "ecc-install-progress",
                 EccProgress {
-                    status: "error".into(),
-                    message: format!("Exit code: {:?}", status.code()),
+                    status: "running".into(),
+                    message: "Retrying with explicit marketplace name...".into(),
                     timestamp: now_ms(),
                 },
             );
-            Err(format!("ecc-install failed: {:?}", status.code()))
+
+            let mut cmd3 = claude_command(&program, &config_dir);
+            cmd3.args(["plugin", "install", "ecc@ecc", "-s", "user"]);
+            cmd3.stdout(Stdio::piped()).stderr(Stdio::piped());
+
+            let mut child3 = match cmd3.spawn() {
+                Ok(c) => c,
+                Err(e) => {
+                    let _ = app.emit(
+                        "ecc-install-progress",
+                        EccProgress {
+                            status: "error".into(),
+                            message: format!("Install failed: {}", e),
+                            timestamp: now_ms(),
+                        },
+                    );
+                    return Err(format!("ecc install failed: {}", e));
+                }
+            };
+
+            emit_child_output(&app, &mut child3);
+
+            let status3 = child3
+                .wait()
+                .map_err(|e| format!("Wait retry install failed: {}", e))?;
+
+            if status3.success() {
+                let _ = app.emit(
+                    "ecc-install-progress",
+                    EccProgress {
+                        status: "done".into(),
+                        message: "ECC installation completed".into(),
+                        timestamp: now_ms(),
+                    },
+                );
+                Ok(true)
+            } else {
+                let _ = app.emit(
+                    "ecc-install-progress",
+                    EccProgress {
+                        status: "error".into(),
+                        message: format!("Install failed, exit code: {:?}", status3.code()),
+                        timestamp: now_ms(),
+                    },
+                );
+                Err(format!("ecc install failed: {:?}", status3.code()))
+            }
         }
     })
     .await
     .map_err(|e| format!("Task join error: {}", e))?
 }
 
-/// 卸载 ECC：删除 ~/.claude/ 下 ECC 相关文件
+/// 卸载 ECC（通过 Claude CLI 插件机制）
 #[command]
-pub async fn ecc_uninstall() -> Result<bool, String> {
-    let claude_dir = get_claude_dir().ok_or_else(|| "Cannot determine HOME directory".to_string())?;
+pub async fn ecc_uninstall(app: AppHandle) -> Result<bool, String> {
+    tokio::task::spawn_blocking(move || {
+        let (program, _prefix) =
+            find_claude().ok_or_else(|| "claude CLI not found. Cannot uninstall.".to_string())?;
 
-    let mut removed_any = false;
+        let config_dir = get_claude_config_dir(&app);
 
-    // 删除 ecc2 目录
-    let ecc2_dir = claude_dir.join("ecc2");
-    if ecc2_dir.exists() {
-        std::fs::remove_dir_all(&ecc2_dir).map_err(|e| format!("Failed to remove ecc2: {}", e))?;
-        removed_any = true;
-    }
+        let mut cmd = claude_command(&program, &config_dir);
+        cmd.args(["plugin", "uninstall", "ecc"]);
 
-    // 删除 state-store 目录
-    let state_store = claude_dir.join("state-store");
-    if state_store.exists() {
-        std::fs::remove_dir_all(&state_store).map_err(|e| format!("Failed to remove state-store: {}", e))?;
-        removed_any = true;
-    }
+        let output = cmd
+            .output()
+            .map_err(|e| format!("Failed to run uninstall: {}", e))?;
 
-    // 删除 agents 目录下 ECC 相关文件
-    let agents_dir = claude_dir.join("agents");
-    if let Ok(entries) = std::fs::read_dir(&agents_dir) {
-        for entry in entries.flatten() {
-            let name = entry.file_name();
-            let name_str = name.to_string_lossy();
-            if name_str.contains("ecc") || name_str.contains("typescript-reviewer")
-                || name_str.contains("build-resolver") || name_str.contains("kotlin-reviewer")
-            {
-                let path = entry.path();
-                if path.is_dir() {
-                    std::fs::remove_dir_all(&path).ok();
-                } else {
-                    std::fs::remove_file(&path).ok();
-                }
-                removed_any = true;
-            }
-        }
-    }
+        let stdout_str = String::from_utf8_lossy(&output.stdout);
+        let stderr_str = String::from_utf8_lossy(&output.stderr);
 
-    // 删除 skills 目录下 ECC 相关文件
-    let skills_dir = claude_dir.join("skills");
-    if let Ok(entries) = std::fs::read_dir(&skills_dir) {
-        for entry in entries.flatten() {
-            let name = entry.file_name();
-            let name_str = name.to_string_lossy();
-            if name_str.contains("ecc") || name_str.contains("configure-ecc")
-                || name_str.contains("market-research") || name_str.contains("article-writing")
-            {
-                let path = entry.path();
-                if path.is_dir() {
-                    std::fs::remove_dir_all(&path).ok();
-                } else {
-                    std::fs::remove_file(&path).ok();
-                }
-                removed_any = true;
-            }
-        }
-    }
-
-    Ok(removed_any)
+        // 卸载即使返回非零（插件本来就没装），也视为成功清理
+        Ok(output.status.success()
+            || stderr_str.contains("not installed")
+            || stdout_str.contains("not installed"))
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
 }

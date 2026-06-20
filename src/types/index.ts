@@ -41,6 +41,23 @@ export interface Workspace {
   createdAt: number;
 }
 
+export type CodeWikiLanguage = 'zh' | 'en';
+
+export interface KnowledgeBaseConfig {
+  language: CodeWikiLanguage;
+  autoUpdate: boolean;
+  autoExport: boolean;
+  referenceEnabled: boolean;
+  generatedAt?: number;
+}
+
+export interface CodeWikiEntry {
+  name: string;
+  path: string;
+  isDirectory: boolean;
+  children?: CodeWikiEntry[];
+}
+
 export interface UserInfo {
   name: string;
   email: string;
@@ -692,6 +709,39 @@ export interface SidebarTodo {
   text: string;
   done: boolean;
   createdAt: number;
+}
+
+// ============================================================
+// AI Wiki 生成（AI Wiki Generation）
+// ============================================================
+
+/** 单个失败文档记录 */
+export interface FailedDoc {
+  path: string;
+  error: string;
+  retries: number;
+}
+
+/** 单个 repo 的 wiki 生成元数据 */
+export interface RepoMeta {
+  status: string;
+  catalogDone: boolean;
+  completedDocs: string[];
+  failedDocs: FailedDoc[];
+}
+
+/** Wiki 生成断点续传元数据 */
+export interface WikiMeta {
+  version: number;
+  workspaceName: string;
+  modelId: string;
+  language: string;
+  generatedAt: number;
+  status: string;
+  catalogDone: boolean;
+  completedDocs: string[];
+  failedDocs: FailedDoc[];
+  repos: Record<string, RepoMeta>;
 }
 
 // ============================================================

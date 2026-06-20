@@ -1,0 +1,57 @@
+# 知识卡导出索引文件
+schema_version: 1
+locale: zh-CN
+branch: main
+exported_at: "2026-06-18T20:34:19Z"
+modules:
+    "":
+        dir_name: Rabbit Coding 桌面应用编排层
+        title: Rabbit Coding 桌面应用编排层
+        scope:
+            - README.md
+            - .gitignore
+            - .qoderignore
+            - package.json
+            - pnpm-lock.yaml
+            - pnpm-workspace.yaml
+            - tsconfig.json
+            - tsconfig.node.json
+            - vite.config.ts
+            - index.html
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    frontend:
+        dir_name: AI Agent 前端交互与状态管理
+        title: AI Agent 前端交互与状态管理
+        scope:
+            - src/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: sidecar
+            - path: tauri_backend
+    sidecar:
+        dir_name: Claude Agent Sidecar 通信桥接
+        title: Claude Agent Sidecar 通信桥接
+        scope:
+            - sidecar/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: frontend
+            - path: tauri_backend
+    tauri_backend:
+        dir_name: Rabbit Coding 桌面应用后端核心
+        title: Rabbit Coding 桌面应用后端核心
+        scope:
+            - src-tauri/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: sidecar
+            - path: frontend

@@ -4,9 +4,10 @@ import { useI18n } from '../../i18n/useI18n';
 
 interface WorkspaceListProps {
   store: ReturnType<typeof useWorkspaces>;
+  onOpenKnowledgeBase: (workspaceId: string) => void;
 }
 
-export default function WorkspaceList({ store }: WorkspaceListProps) {
+export default function WorkspaceList({ store, onOpenKnowledgeBase }: WorkspaceListProps) {
   const { t } = useI18n();
   const {
     workspaces,
@@ -52,6 +53,7 @@ export default function WorkspaceList({ store }: WorkspaceListProps) {
           onStartEditRabbit={(rabbitId) => store.startEdit(rabbitId)}
           onTogglePin={(rabbitId) => store.togglePin(workspace.id, rabbitId)}
           editingRabbitId={editingId}
+          onOpenKnowledgeBase={() => onOpenKnowledgeBase(workspace.id)}
         />
       ))}
     </div>

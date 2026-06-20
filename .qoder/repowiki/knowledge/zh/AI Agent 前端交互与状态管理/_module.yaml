@@ -1,0 +1,10 @@
+schema_version: 1
+module_path: frontend
+title: AI Agent 前端交互与状态管理
+scope:
+    - src/
+source_files: []
+depends_on: []
+related_to:
+    - path: sidecar
+    - path: tauri_backend

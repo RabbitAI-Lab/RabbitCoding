@@ -8,8 +8,11 @@
 import { useEffect, useRef, useMemo } from 'react';
 import { Loader2, Archive } from 'lucide-react';
 import { AgentMessageItem } from './AgentMessage';
-import type { AgentMessage, AssistantToolUseMessage, ToolResultMessage, Rabbit } from '../../types';
+import { CopyMarkdownButton } from './CopyMarkdownButton';
+import type { AgentMessage, AssistantToolUseMessage, AssistantTextMessage, UsageUpdateMessage, ToolResultMessage, Rabbit } from '../../types';
 import { useI18n } from '../../i18n/useI18n';
+import { useLocalStorage } from '../../hooks/useLocalStorage';
+import { formatTokens } from '../../hooks/useUsage';
 
 interface AgentChatProps {
   rabbit: Rabbit;
@@ -35,6 +38,14 @@ interface MessageGroup {
  * 每个 user 消息开新组，后续非 user 消息归入该组，
  * 使 sticky 约束矩形限定在组内，实现“下一条推走上条”的效果。
  */
+
+/** 隐藏的内部工具调用：仅渲染对应的交互卡片，不展示原始 tool_use 块 */
+const HIDDEN_TOOLS = new Set([
+  'ExitPlanMode',
+  'mcp__rabbit-spec__WriteSpec',
+  'AskUserQuestion',
+]);
+
 function processMessages(messages: AgentMessage[]): MessageGroup[] {
   // 构建 tool_result 映射
   const toolResultMap = new Map<string, ToolResultMessage>();
@@ -60,6 +71,11 @@ function processMessages(messages: AgentMessage[]): MessageGroup[] {
     const msg = messages[i];
     if (msg.type === 'tool_result') continue;
     if (msg.type === 'result' && i !== lastResultIndex) continue;
+    // 隐藏内部工具调用：ExitPlanMode（sidecar deny）、WriteSpec（通过 spec_confirmation 卡片展示）、AskUserQuestion（通过 ask_user_question 卡片展示）
+    if (msg.type === 'assistant' && msg.subtype === 'tool_use'
+        && HIDDEN_TOOLS.has((msg as AssistantToolUseMessage).toolName)) {
+      continue;
+    }
 
     let toolResult: ToolResultMessage | undefined;
     if (msg.type === 'assistant' && msg.subtype === 'tool_use') {
@@ -90,6 +106,7 @@ export default function AgentChat({ rabbit, onSpecRun }: AgentChatProps) {
   const isAtBottomRef = useRef(true);
   const prevMsgCountRef = useRef(rabbit.messages.length);
   const isRunning = rabbit.status === 'running';
+  const [showTokenUsage] = useLocalStorage('pref-show-token-usage', false);
 
   // 预处理消息（分组）
   const groups = useMemo(() => processMessages(rabbit.messages), [rabbit.messages]);
@@ -180,6 +197,34 @@ export default function AgentChat({ rabbit, onSpecRun }: AgentChatProps) {
                     />
                   );
                 })}
+                {/* 尾部行：复制按钮 + token 用量（受设置开关控制） */}
+                {(() => {
+                  const texts = group.items
+                    .filter(item => item.message.type === 'assistant' && item.message.subtype === 'text')
+                    .map(item => (item.message as AssistantTextMessage).text)
+                    .filter(text => text.trim().length > 0);
+                  const groupIsStreaming = isLastGroup && isRunning;
+                  if (texts.length === 0 || groupIsStreaming) return null;
+
+                  // 聚合该轮所有 usage_update 的 token
+                  const usages = group.items
+                    .filter(item => item.message.type === 'usage_update')
+                    .map(item => (item.message as UsageUpdateMessage).usage);
+                  const totalIn = usages.reduce((s, u) => s + (u.inputTokens ?? 0), 0);
+                  const totalOut = usages.reduce((s, u) => s + (u.outputTokens ?? 0), 0);
+                  const totalCache = usages.reduce((s, u) => s + (u.cacheReadInputTokens ?? 0), 0);
+
+                  return (
+                    <div className="flex items-center gap-3 py-1.5">
+                      <CopyMarkdownButton texts={texts} />
+                      {showTokenUsage && usages.length > 0 && (
+                        <span className="text-[11px] text-gray-400 dark:text-gray-500">
+                          {t('agent.message.tokenLabel')} {t('agent.message.tokenIn')}: {formatTokens(totalIn)}　{t('agent.message.tokenOut')}: {formatTokens(totalOut)}　{t('agent.message.tokenCache')}: {formatTokens(totalCache)}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
             );
           })}

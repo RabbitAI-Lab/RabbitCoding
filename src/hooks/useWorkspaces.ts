@@ -28,7 +28,7 @@ function cleanupInflightState(workspaces: Workspace[]): Workspace[] {
 export function useWorkspaces() {
   // selected IDs 保持 localStorage（小数据，同步读取）
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useLocalStorage<string | null>('rabbit-selected-workspace', null);
-  const [selectedRabbitId, setSelectedRabbitId] = useLocalStorage<string | null>('rabbit-selected-rabbit', null);
+  const [selectedRabbitId, setSelectedRabbitId] = useState<string | null>(null);
 
   // workspaces 改为 useState + 异步加载（主数据源切换到 SQLite）
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);

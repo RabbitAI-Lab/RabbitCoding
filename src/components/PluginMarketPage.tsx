@@ -23,6 +23,7 @@ import { usePlugins, type PluginId, type PluginState } from '../hooks/usePlugins
 import gitnexusLogo from '../assets/gitnexus-logo.png';
 import context7Logo from '../assets/context7-logo.png';
 import eccLogo from '../assets/ecc-logo.png';
+import claudeMemLogo from '../assets/claude-mem-logo.webp';
 
 // ============================================================
 // 插件元数据
@@ -53,6 +54,12 @@ const PLUGINS: PluginMeta[] = [
     name: 'ECC 2.0',
     logo: eccLogo,
     descKey: 'pluginMarket.eccDesc',
+  },
+  {
+    id: 'claudeMem',
+    name: 'Claude-Mem',
+    logo: claudeMemLogo,
+    descKey: 'pluginMarket.claudeMemDesc',
   },
 ];
 
@@ -111,18 +118,18 @@ function PluginCard({ meta, showUninstall, pluginStates, installPlugin, uninstal
 
       {/* 底部操作区 */}
       <div className="flex items-center justify-between">
-        {isInstalled && !isInstalling && !isError && !showUninstall ? (
-          /* 市场 Tab：已安装状态默认只显示徽章 */
-          <span className="flex items-center gap-1 text-xs font-medium text-green-600 dark:text-green-400">
-            <CheckCircle2 size={14} />
-            {t('pluginMarket.installed')}
-          </span>
-        ) : isInstalling ? (
+        {isInstalling ? (
           <span className="flex items-center gap-1 text-xs font-medium text-blue-600 dark:text-blue-400">
             <Loader2 size={14} className="animate-spin" />
             {t('pluginMarket.installing')}
           </span>
-        ) : isError ? null : (
+        ) : isError ? null : isInstalled ? (
+          /* 已安装（市场 Tab 和已安装 Tab 均显示绿色徽章） */
+          <span className="flex items-center gap-1 text-xs font-medium text-green-600 dark:text-green-400">
+            <CheckCircle2 size={14} />
+            {t('pluginMarket.installed')}
+          </span>
+        ) : (
           <span className="text-xs text-gray-400 dark:text-gray-500">{t('pluginMarket.notInstalled')}</span>
         )}
 

@@ -285,38 +285,27 @@ struct SidecarPath {
 }
 
 /// 获取 sidecar 脚本路径
-/// 开发模式：直接使用 node 运行 sidecar/dist/index.js
+/// 开发模式：使用 node + tsx 直接运行 TypeScript 源码（无需预编译）
 /// 生产模式：使用内置 Node.js 运行 sidecar bundle（resources/sidecar/sidecar-bundle.js）
 fn get_sidecar_path(app: &AppHandle) -> SidecarPath {
     let is_dev = cfg!(debug_assertions);
 
     if is_dev {
-        // 开发模式：使用 node 运行 TypeScript 源码
-        // CARGO_MANIFEST_DIR 编译时指向 src-tauri/，向上一级即项目根目录
+        // 开发模式：使用 npx tsx 直接运行 ts 源码
+        // 不使用 dist/ 编译产物，避免编译产物过期导致代码不生效
+        // tsx 运行时可以正常 require() node_modules 中的 native binary
         let sidecar_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("..")
             .join("sidecar");
 
-        let dist_path = sidecar_dir.join("dist").join("index.js");
-
-        // 如果 dist 存在就用编译后的，否则用 tsx 直接运行
-        if dist_path.exists() {
-            SidecarPath {
-                program: "node".to_string(),
-                args: vec![dist_path.to_string_lossy().to_string()],
-            }
-        } else {
-            // 使用 npx tsx 直接运行 ts 源码
-            // Windows 上 npx 实际是 npx.cmd
-            #[cfg(target_os = "windows")]
-            let npx_program = "npx.cmd";
-            #[cfg(not(target_os = "windows"))]
-            let npx_program = "npx";
-            let src_path = sidecar_dir.join("src").join("index.ts");
-            SidecarPath {
-                program: npx_program.to_string(),
-                args: vec!["tsx".to_string(), src_path.to_string_lossy().to_string()],
-            }
+        #[cfg(target_os = "windows")]
+        let npx_program = "npx.cmd";
+        #[cfg(not(target_os = "windows"))]
+        let npx_program = "npx";
+        let src_path = sidecar_dir.join("src").join("index.ts");
+        SidecarPath {
+            program: npx_program.to_string(),
+            args: vec!["tsx".to_string(), src_path.to_string_lossy().to_string()],
         }
     } else {
         // 生产模式：使用内置 Node.js 运行 sidecar bundle

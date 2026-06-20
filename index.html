@@ -11,6 +11,13 @@
           root.classList.toggle('dark', dark);
           root.style.colorScheme = dark ? 'dark' : 'light';
         } catch (e) {}
+        try {
+          var params = new URLSearchParams(window.location.search);
+          if (params.get('window') === 'pet') {
+            document.documentElement.classList.add('pet-window-document');
+            document.documentElement.style.background = 'transparent';
+          }
+        } catch (e) {}
       })();
     </script>
     <meta charset="UTF-8" />
@@ -20,6 +27,17 @@
   </head>
 
   <body>
+    <script>
+      (function () {
+        try {
+          var params = new URLSearchParams(window.location.search);
+          if (params.get('window') === 'pet') {
+            document.body.classList.add('pet-window-document');
+            document.body.style.background = 'transparent';
+          }
+        } catch (e) {}
+      })();
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

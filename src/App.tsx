@@ -1,10 +1,14 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { ConfigProvider, theme as antdTheme } from "antd";
+import { invoke } from "@tauri-apps/api/core";
 import Sidebar from "./components/sidebar/Sidebar";
 import ContentArea from "./components/ContentArea";
 import SettingsPage, { type SettingsSection } from "./components/settings/SettingsPage";
 import PluginMarketPage from "./components/PluginMarketPage";
 import TodoPage from "./components/TodoPage";
+import KnowledgeBasePage from "./components/KnowledgeBasePage";
+import PendingWikiDialog, { type PendingWikiInfo } from "./components/wiki/PendingWikiDialog";
+import PetTaskBridge from "./components/pet/PetTaskBridge";
 import { useWorkspaces } from "./hooks/useWorkspaces";
 import { CodebaseIndexProvider } from "./hooks/useCodebaseIndex";
 import { AgentProvider } from './hooks/useAgentContext';
@@ -28,8 +32,36 @@ function AntdThemeSync({ children }: { children: React.ReactNode }) {
 
 function App() {
   const store = useWorkspaces();
-  const [view, setView] = useState<'main' | 'settings' | 'pluginMarket' | 'todo'>('main');
+  const [view, setView] = useState<'main' | 'settings' | 'pluginMarket' | 'todo' | 'knowledgeBase'>('main');
   const [settingsSection, setSettingsSection] = useState<SettingsSection | undefined>(undefined);
+  const [pendingWiki, setPendingWiki] = useState<PendingWikiInfo[]>([]);
+  const selectedWorkspace = store.workspaces.find(w => w.id === store.selectedWorkspaceId);
+
+  // 冷启动检测未完成的 Wiki 生成
+  useEffect(() => {
+    if (store.isLoading) return;
+    const checkPending = async () => {
+      const wsList = store.workspaces
+        .filter(ws => ws.path)
+        .map(ws => ({
+          workspaceId: ws.id,
+          workspacePath: ws.path!,
+          workspaceName: ws.name,
+        }));
+      if (wsList.length === 0) return;
+      try {
+        const result = await invoke<PendingWikiInfo[]>('wiki_check_pending', { workspaces: wsList });
+        if (result.length > 0) {
+          setPendingWiki(result);
+        }
+      } catch (e) {
+        console.error('[App] wiki_check_pending failed:', e);
+      }
+    };
+    void checkPending();
+    // 仅在 isLoading 从 true→false 时执行一次
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [store.isLoading]);
 
   // 点击 Rabbit/Workspace 时自动切回 main 视图
   const storeWithViewSwitch = useMemo(() => ({
@@ -66,6 +98,7 @@ function App() {
         <AuthProvider>
         <CodebaseIndexProvider workspaces={store.workspaces}>
           <AgentProvider store={store}>
+          <PetTaskBridge store={store} />
           <div className="flex h-screen bg-[#F8F8F8] dark:bg-[#1a1a1a]">
             {view === 'settings' ? (
               <SettingsPage onBack={() => setView('main')} initialSection={settingsSection} workspaces={store.workspaces} />
@@ -78,11 +111,14 @@ function App() {
                   isPluginMarketActive={view === 'pluginMarket'}
                   onOpenTodo={() => { store.selectRabbit(null); setView('todo'); }}
                   isTodoActive={view === 'todo'}
+                  onOpenKnowledgeBase={(workspaceId) => { store.selectWorkspace(workspaceId); setView('knowledgeBase'); }}
                 />
                 {view === 'pluginMarket' ? (
                   <PluginMarketPage />
                 ) : view === 'todo' ? (
                   <TodoPage />
+                ) : view === 'knowledgeBase' ? (
+                  <KnowledgeBasePage workspace={selectedWorkspace} />
                 ) : (
                   <ContentArea store={storeWithViewSwitch} onOpenSettings={(section) => { setSettingsSection(section as SettingsSection); setView('settings'); }} />
                 )}
@@ -90,6 +126,19 @@ function App() {
             )}
           </div>
           </AgentProvider>
+
+                   {/* 冷启动提醒：未完成的 Wiki 生成 */}
+          {pendingWiki.length > 0 && (
+            <PendingWikiDialog
+              pendingList={pendingWiki}
+              onContinue={(wsId) => {
+                store.selectWorkspace(wsId);
+                setView('knowledgeBase');
+                setPendingWiki([]);
+              }}
+              onDismiss={() => setPendingWiki([])}
+            />
+          )}
         </CodebaseIndexProvider>
         </AuthProvider>
         </I18nProvider>

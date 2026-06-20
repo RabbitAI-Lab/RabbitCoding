@@ -11,7 +11,7 @@
 
 import { query, createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import * as nodePath from "path";
 import * as nodeFs from "fs/promises";
@@ -43,6 +43,65 @@ function resolveNativeCliBinary(): string | undefined {
 }
 
 const NATIVE_CLI_BINARY = resolveNativeCliBinary();
+
+/**
+ * 检测已安装并启用的插件，返回 SDK plugins 配置
+ *
+ * 读取 CLAUDE_CONFIG_DIR 下的：
+ *   - settings.json → enabledPlugins（哪些插件被启用）
+ *   - plugins/installed_plugins.json → installPath（插件实际路径）
+ *
+ * 通过 SDK query() 的 plugins 参数显式注入插件，
+ * 使插件的 hooks/agents/commands/skills 在 sidecar 中生效。
+ * 这独立于 settingSources: [] 的隔离设计——
+ * settingSources 阻止文件系统 settings 覆盖 BYOK，
+ * 而 plugins 参数只注入扩展能力，不影响 API 配置。
+ */
+function resolveInstalledPlugins(): Array<{ type: 'local'; path: string }> {
+  const configDir = process.env.CLAUDE_CONFIG_DIR;
+  if (!configDir) return [];
+
+  try {
+    // 1. 读取 settings.json 获取启用的插件
+    const settingsPath = nodePath.join(configDir, 'settings.json');
+    if (!existsSync(settingsPath)) return [];
+    const settings = JSON.parse(readFileSync(settingsPath, 'utf-8'));
+    const enabledPlugins: Record<string, boolean> = settings.enabledPlugins || {};
+
+    // 2. 读取 installed_plugins.json 获取安装路径
+    const installedPath = nodePath.join(configDir, 'plugins', 'installed_plugins.json');
+    if (!existsSync(installedPath)) return [];
+    const installed = JSON.parse(readFileSync(installedPath, 'utf-8'));
+    const pluginsMap: Record<string, Array<{ installPath: string; lastUpdated?: string }>> =
+      installed.plugins || {};
+
+    // 3. 匹配：只加载 enabledPlugins 中为 true 且已安装的插件
+    const result: Array<{ type: 'local'; path: string }> = [];
+    for (const [pluginKey, enabled] of Object.entries(enabledPlugins)) {
+      if (!enabled) continue;
+      const entries = pluginsMap[pluginKey];
+      if (!Array.isArray(entries) || entries.length === 0) continue;
+
+      // 取最新版本（lastUpdated 最新的）
+      const latest = entries.reduce((a, b) =>
+        (b.lastUpdated || '') > (a.lastUpdated || '') ? b : a
+      );
+      if (latest.installPath && existsSync(latest.installPath)) {
+        result.push({ type: 'local', path: latest.installPath });
+        process.stderr.write(`[agent] plugin loaded: ${pluginKey} → ${latest.installPath}\n`);
+      }
+    }
+    if (result.length === 0) {
+      process.stderr.write(`[agent] no plugins enabled (configDir=${configDir})\n`);
+    } else {
+      process.stderr.write(`[agent] plugins summary: ${result.length} plugin(s) loaded\n`);
+    }
+    return result;
+  } catch (err) {
+    process.stderr.write(`[agent] resolveInstalledPlugins error: ${err}\n`);
+    return [];
+  }
+}
 
 /** 活跃查询管理 */
 const activeQueries = new Map<string, AbortController>();
@@ -258,21 +317,56 @@ async function runQuery(
       allowedTools: options.allowedTools,
       permissionMode: options.permissionMode,
       canUseTool: async (toolName: string, input: Record<string, unknown>, toolOptions: any) => {
-        process.stderr.write(`[agent] canUseTool called: ${toolName}\n`);
+        // 诊断日志：打印 input 类型和值，排查 ZodError 根因
+        const rawInput = input as unknown;
+        const inputType = rawInput === null ? "null" : rawInput === undefined ? "undefined" : Array.isArray(rawInput) ? "array" : typeof rawInput;
+        process.stderr.write(`[agent] canUseTool called: ${toolName} | input type=${inputType}`);
+        if (rawInput !== null && rawInput !== undefined && typeof rawInput === "object") {
+          process.stderr.write(` keys=[${Object.keys(rawInput).join(",")}]`);
+        } else if (typeof rawInput === "string") {
+          process.stderr.write(` val="${(rawInput as string).substring(0, 100)}"`);
+        }
+        process.stderr.write("\n");
+
+        // 防御性修复：第三方模型（如 GLM-5.2）可能返回 null/undefined/string 类型的 input
+        // 导致 CLI 内部 Zod 校验失败（ZodError: Invalid input）
+        // 对所有工具都确保 input 是干净的 plain object，并通过 updatedInput 传回 CLI
+        // 这样 CLI 不会使用模型原始的（可能有问题的）input，而是使用我们清洗后的版本
+        let cleanInput: Record<string, unknown>;
+        let needsUpdate = false;
+        if (rawInput === null || rawInput === undefined || typeof rawInput !== "object") {
+          process.stderr.write(`[agent] WARNING: ${toolName} input is ${inputType}, normalizing to {}\n`);
+          cleanInput = {};
+          needsUpdate = true;
+        } else {
+          // input 已经是对象，但可能包含不可序列化的值或原型链问题
+          // 用 JSON 往返确保是纯 plain object
+          try {
+            cleanInput = JSON.parse(JSON.stringify(rawInput)) as Record<string, unknown>;
+            // 如果 JSON 往返后内容不一致，说明原始 input 有问题
+            needsUpdate = cleanInput !== rawInput;
+          } catch {
+            process.stderr.write(`[agent] WARNING: ${toolName} input is not JSON-serializable, using {}\n`);
+            cleanInput = {};
+            needsUpdate = true;
+          }
+        }
 
         // Spec 查询（__spec__ 前缀）特殊处理
         if (id.startsWith("__spec__")) {
           // WriteSpec MCP 工具：允许（用于写入 spec 文档）
           if (toolName === "mcp__rabbit-spec__WriteSpec") {
             process.stderr.write(`[agent] Allowing WriteSpec for spec query\n`);
-            return { behavior: "allow", toolUseID: toolOptions.toolUseID };
+            const result: Record<string, unknown> = { behavior: "allow" as const, toolUseID: toolOptions.toolUseID };
+            if (needsUpdate) result.updatedInput = cleanInput;
+            process.stderr.write(`[agent] canUseTool return: ${JSON.stringify(result)}\n`);
+            return result;
           }
           // ExitPlanMode：永远拦截，spec 查询不退出 plan 模式
-          // 用户需在前端确认 spec 后手动点击运行按钮
           if (toolName === "ExitPlanMode") {
             process.stderr.write(`[agent] Blocked ExitPlanMode for spec query (never exit plan)\n`);
             return {
-              behavior: "deny",
+              behavior: "deny" as const,
               message: specWrittenQueries.has(id)
                 ? "The specification has been saved successfully. You can now finish your response without calling ExitPlanMode."
                 : "You must call the WriteSpec tool to save the specification document first. Do not call ExitPlanMode.",
@@ -282,7 +376,14 @@ async function runQuery(
 
         // 非 AskUserQuestion 工具：自动放行
         if (toolName !== "AskUserQuestion") {
-          return { behavior: "allow", toolUseID: toolOptions.toolUseID };
+          const result: Record<string, unknown> = { behavior: "allow" as const, toolUseID: toolOptions.toolUseID };
+          // 对 MCP 工具（mcp__ 开头），始终通过 updatedInput 传回清洗后的 input
+          // 这确保 CLI 使用合法的 plain object，而非模型可能返回的非标准格式
+          if (needsUpdate || toolName.startsWith("mcp__")) {
+            result.updatedInput = cleanInput;
+          }
+          process.stderr.write(`[agent] canUseTool return: ${JSON.stringify(result)}\n`);
+          return result;
         }
         // AskUserQuestion：发消息到前端，等待用户回答
         return handleAskUserQuestion(id, input, toolOptions);
@@ -316,6 +417,36 @@ async function runQuery(
         delete queryOptions[key];
       }
     }
+
+    // 当 allowedTools 非空时，自动追加 MCP 工具通配符
+    // allowedTools 是白名单机制——不在列表中的工具会被 CLI 过滤掉。
+    // 插件加载的 MCP 工具名以 mcp__ 开头，前端不可能预知所有名字，
+    // 因此用 mcp__ 前缀通配符让所有 MCP 工具都可用。
+    if (Array.isArray(queryOptions.allowedTools) && queryOptions.allowedTools.length > 0) {
+      const hasMcpWildcard = queryOptions.allowedTools.some(
+        (t: string) => t === "mcp__" || t === "mcp__*"
+      );
+      if (!hasMcpWildcard) {
+        queryOptions.allowedTools.push("mcp__");
+        process.stderr.write(`[agent] allowedTools: appended \"mcp__\" wildcard for plugin MCP tools\n`);
+      }
+    }
+
+    // 加载已安装并启用的插件（claude-mem 等）
+    // 通过 SDK plugins 参数显式注入，使插件的 hooks/agents/commands/skills 生效
+    const installedPlugins = resolveInstalledPlugins();
+    if (installedPlugins.length > 0) {
+      queryOptions.plugins = installedPlugins;
+    }
+
+    process.stderr.write(`[agent] === Query Runtime ===\n`);
+    process.stderr.write(`[agent] queryId: ${id}\n`);
+    process.stderr.write(`[agent] cwd: ${(extraOptions as any).cwd}\n`);
+    process.stderr.write(`[agent] CLAUDE_CONFIG_DIR: ${process.env.CLAUDE_CONFIG_DIR || "(not set)"}\n`);
+    process.stderr.write(`[agent] nativeCli: ${NATIVE_CLI_BINARY || "(node_modules default)"}\n`);
+    process.stderr.write(`[agent] plugins: ${installedPlugins.length} enabled${installedPlugins.length > 0 ? " → " + installedPlugins.map(p => p.path).join(", ") : ""}\n`);
+    process.stderr.write(`[agent] model: ${options.model || "(default)"}\n`);
+    process.stderr.write(`[agent] ========================\n`);
 
     for await (const message of query({ prompt, options: queryOptions })) {
       const msg = message as any;
@@ -434,10 +565,28 @@ async function runQuery(
         continue;
       }
 
-      // 忽略其他消息类型
+      // 忽略其他消息类型，但打印诊断日志（排查 ZodError 等 SDK 内部错误）
+      if (msg.type) {
+        process.stderr.write(`[agent] unhandled msg: type=${msg.type} subtype=${msg.subtype ?? ""} keys=[${Object.keys(msg).join(",")}]\n`);
+        // 如果 result 字段包含错误信息，打印完整内容
+        if (msg.result && typeof msg.result === "string" && (msg.result.includes("ZodError") || msg.result.includes("permission") || msg.result.includes("Invalid"))) {
+          process.stderr.write(`[agent] ERROR in result: ${msg.result.substring(0, 500)}\n`);
+        }
+        if (msg.errors && Array.isArray(msg.errors)) {
+          process.stderr.write(`[agent] errors: ${msg.errors.join("; ").substring(0, 500)}\n`);
+        }
+      }
     }
   } catch (err: unknown) {
     const errorMessage = err instanceof Error ? err.message : String(err);
+
+    // 捕获并打印 ZodError 的完整信息
+    if (errorMessage.includes("ZodError") || errorMessage.includes("Invalid input")) {
+      process.stderr.write(`[agent] CAUGHT ZodError: ${errorMessage.substring(0, 1000)}\n`);
+      if (err instanceof Error && err.stack) {
+        process.stderr.write(`[agent] ZodError stack: ${err.stack.substring(0, 500)}\n`);
+      }
+    }
 
     const isAborted =
       errorMessage.toLowerCase().includes("abort") ||

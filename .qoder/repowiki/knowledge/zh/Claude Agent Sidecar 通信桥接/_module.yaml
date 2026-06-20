@@ -1,0 +1,10 @@
+schema_version: 1
+module_path: sidecar
+title: Claude Agent Sidecar 通信桥接
+scope:
+    - sidecar/
+source_files: []
+depends_on: []
+related_to:
+    - path: frontend
+    - path: tauri_backend

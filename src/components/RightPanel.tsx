@@ -1,4 +1,4 @@
-import { useState, useEffect, lazy, Suspense, useMemo } from 'react';
+import { useState, useEffect, lazy, Suspense, useMemo, useCallback } from 'react';
 import {
   FileText,
   CheckCircle2,
@@ -20,6 +20,9 @@ import {
   CircleDot,
   AlertCircle,
   AlertTriangle,
+  RefreshCw,
+  Search,
+  PlusCircle,
   type LucideIcon,
 } from 'lucide-react';
 import type { Rabbit, AgentMessage, AssistantToolUseMessage, TodoItem, IndexItemStatus, Repo } from '../types';
@@ -84,6 +87,49 @@ function IndexStatusBadge({ status }: { status: IndexItemStatus }) {
       {t(cfg.key)}
     </span>
   );
+}
+
+// ============================================================
+// 记忆操作提取
+// ============================================================
+
+interface MemoryOperation {
+  id: string;
+  type: 'search' | 'create' | 'update' | 'delete';
+  title: string;
+  depth?: string;
+  keywords?: string;
+  category?: string;
+  index: number;
+}
+
+function extractMemoryOperations(messages: AgentMessage[]): MemoryOperation[] {
+  const ops: MemoryOperation[] = [];
+  messages.forEach((msg, index) => {
+    if (msg.type !== 'assistant' || msg.subtype !== 'tool_use') return;
+    const toolMsg = msg as AssistantToolUseMessage;
+
+    if (toolMsg.toolName === 'SearchMemory') {
+      ops.push({
+        id: toolMsg.toolUseId,
+        type: 'search',
+        title: String(toolMsg.toolInput.query ?? ''),
+        depth: String(toolMsg.toolInput.depth ?? ''),
+        keywords: String(toolMsg.toolInput.keywords ?? ''),
+        index,
+      });
+    } else if (toolMsg.toolName === 'UpdateMemory') {
+      const action = String(toolMsg.toolInput.action ?? 'create');
+      ops.push({
+        id: toolMsg.toolUseId,
+        type: action as 'create' | 'update' | 'delete',
+        title: String(toolMsg.toolInput.title ?? ''),
+        category: String(toolMsg.toolInput.category ?? ''),
+        index,
+      });
+    }
+  });
+  return ops;
 }
 
 /** 从 Agent 消息列表中提取工具调用序列 */
@@ -280,6 +326,19 @@ export default function RightPanel({ maximized, onToggleMaximize, selectedRabbit
       .map(path => ({ id: path, name: path.split('/').pop() ?? path }))
   , [toolCalls]);
 
+  // 记忆操作
+  const memoryOps = useMemo(() =>
+    selectedRabbit ? extractMemoryOperations(selectedRabbit.messages) : []
+  , [selectedRabbit]);
+
+  const memorySearchOps = useMemo(() =>
+    memoryOps.filter(op => op.type === 'search')
+  , [memoryOps]);
+
+  const memoryUpdateOps = useMemo(() =>
+    memoryOps.filter(op => op.type !== 'search')
+  , [memoryOps]);
+
   // 派生当前工作区的索引项
   const currentWorkspace = useMemo(
     () => workspaces.find(w => w.id === workspaceId),
@@ -290,6 +349,32 @@ export default function RightPanel({ maximized, onToggleMaximize, selectedRabbit
     [indexStates, workspaceId],
   );
   const gitnexusInstalled = gitnexusAvailable?.installed ?? false;
+
+  // 是否存在正在进行中的索引项（用于刷新按钮 spinning 动画）
+  const isAnyIndexing = useMemo(() => {
+    if (!workspaceId) return false;
+    if (docsItem?.status === 'indexing') return true;
+    return (currentWorkspace?.repos ?? []).some(repo => {
+      const item = indexStates[repoKey(workspaceId, repo.id)];
+      return item?.status === 'indexing';
+    });
+  }, [workspaceId, docsItem, currentWorkspace, indexStates]);
+
+  // 一键批量触发当前工作区所有未索引/出错项的索引
+  const handleTriggerAllIndex = useCallback(() => {
+    if (!workspaceId || !currentWorkspace) return;
+    // docs
+    if (docsItem && (docsItem.status === 'idle' || docsItem.status === 'error')) {
+      triggerIndex(workspaceId, 'docs', docsItem.path, 'docs');
+    }
+    // repos
+    for (const repo of currentWorkspace.repos ?? []) {
+      const item = indexStates[repoKey(workspaceId, repo.id)];
+      if (item && (item.status === 'idle' || item.status === 'error')) {
+        triggerIndex(workspaceId, 'repo', repo.path, repo.name, repo.id);
+      }
+    }
+  }, [workspaceId, currentWorkspace, docsItem, indexStates, triggerIndex]);
 
   return (
     <div className="flex h-full flex-col">
@@ -455,23 +540,74 @@ export default function RightPanel({ maximized, onToggleMaximize, selectedRabbit
               </button>
               {!collapsed.references && (
                 <div className="flex flex-col gap-3 pl-1">
-                  {/* 记忆 */}
-                  <div>
-                    <div className="flex items-center gap-1.5 mb-1.5">
-                      <BookOpen size={13} className="text-gray-400 dark:text-gray-500" />
-                      <span className="text-xs text-gray-500 dark:text-gray-400">{t('rightPanel.memory')}</span>
+                  {/* 引用的记忆 (SearchMemory) */}
+                  {memorySearchOps.length > 0 && (
+                    <div>
+                      <div className="flex items-center gap-1.5 mb-1.5">
+                        <Search size={13} className="text-gray-400 dark:text-gray-500" />
+                        <span className="text-xs text-[#9A9A9A] dark:text-gray-400 font-light">{t('rightPanel.memorySearch')}</span>
+                      </div>
+                      <div className="flex flex-col gap-1 pl-4">
+                        {memorySearchOps.map(op => (
+                          <div key={op.id} className="flex items-center gap-2 text-xs text-[#141414] dark:text-gray-100">
+                            <BookOpen size={12} className="text-gray-300 dark:text-gray-600 shrink-0" />
+                            <span className="truncate flex-1">{op.title}</span>
+                            {op.depth && (
+                              <span className="px-1 py-0.5 rounded text-[10px] bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 shrink-0">
+                                {op.depth}
+                              </span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                    <div className="flex flex-col gap-1 pl-4">
-                      {referencedFiles.length > 0 ? referencedFiles.map(ref => (
-                        <div key={ref.id} className="flex items-center gap-2 text-xs text-[#141414] dark:text-gray-100">
-                          <BookOpen size={12} className="text-gray-300 dark:text-gray-600 shrink-0" />
-                          <span className="truncate">{ref.name}</span>
-                        </div>
-                      )) : (
-                        <p className="text-xs text-gray-400 dark:text-gray-500 py-1">{t('rightPanel.noReferences')}</p>
-                      )}
+                  )}
+                  {/* 新增/更新的记忆 (UpdateMemory) */}
+                  {memoryUpdateOps.length > 0 && (
+                    <div>
+                      <div className="flex items-center gap-1.5 mb-1.5">
+                        <BookOpen size={13} className="text-gray-400 dark:text-gray-500" />
+                        <span className="text-xs text-[#9A9A9A] dark:text-gray-400 font-light">{t('rightPanel.memoryUpdate')}</span>
+                      </div>
+                      <div className="flex flex-col gap-1 pl-4">
+                        {memoryUpdateOps.map(op => {
+                          const iconMap = {
+                            create: { Icon: PlusCircle, cls: 'text-green-500' },
+                            update: { Icon: RefreshCw, cls: 'text-blue-500' },
+                            delete: { Icon: Trash2, cls: 'text-red-500' },
+                          };
+                          const { Icon: OpIcon, cls } = iconMap[op.type as keyof typeof iconMap] ?? iconMap.create;
+                          return (
+                            <div key={op.id} className="flex items-center gap-2 text-xs text-[#141414] dark:text-gray-100">
+                              <OpIcon size={12} className={`${cls} shrink-0`} />
+                              <span className="truncate">{op.title}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
+                  )}
+                  {/* 引用的文件 (Read) */}
+                  {referencedFiles.length > 0 && (
+                    <div>
+                      <div className="flex items-center gap-1.5 mb-1.5">
+                        <FileText size={13} className="text-gray-400 dark:text-gray-500" />
+                        <span className="text-xs text-[#9A9A9A] dark:text-gray-400 font-light">{t('rightPanel.referencedFiles')}</span>
+                      </div>
+                      <div className="flex flex-col gap-1 pl-4">
+                        {referencedFiles.map(ref => (
+                          <div key={ref.id} className="flex items-center gap-2 text-xs text-[#141414] dark:text-gray-100">
+                            <FileText size={12} className="text-gray-300 dark:text-gray-600 shrink-0" />
+                            <span className="truncate">{ref.name}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {/* 整体空态 */}
+                  {memorySearchOps.length === 0 && memoryUpdateOps.length === 0 && referencedFiles.length === 0 && (
+                    <p className="text-xs text-gray-400 dark:text-gray-500 py-1">{t('rightPanel.noReferences')}</p>
+                  )}
                 </div>
               )}
             </div>
@@ -548,10 +684,20 @@ export default function RightPanel({ maximized, onToggleMaximize, selectedRabbit
                 className="flex items-center justify-between w-full text-xs font-normal text-[#646261] dark:text-gray-400 mb-2"
               >
                 <span>{t('rightPanel.indexStatus')}</span>
-                <ChevronDown
-                  size={14}
-                  className={`transition-transform text-gray-400 dark:text-gray-500 ${collapsed.indexStatus ? '-rotate-90' : ''}`}
-                />
+                <span className="flex items-center gap-1">
+                  <span
+                    role="button"
+                    onClick={(e) => { e.stopPropagation(); handleTriggerAllIndex(); }}
+                    title={t('rightPanel.indexAll')}
+                    className={`flex items-center text-gray-400 hover:text-blue-600 dark:text-gray-500 dark:hover:text-blue-400 transition-colors ${(!workspaceId || !gitnexusInstalled) ? 'pointer-events-none opacity-40' : ''}`}
+                  >
+                    <RefreshCw size={13} className={isAnyIndexing ? 'animate-spin' : ''} />
+                  </span>
+                  <ChevronDown
+                    size={14}
+                    className={`transition-transform text-gray-400 dark:text-gray-500 ${collapsed.indexStatus ? '-rotate-90' : ''}`}
+                  />
+                </span>
               </button>
               {!collapsed.indexStatus && (
                 <div className="flex flex-col gap-1 pl-1">

@@ -10,13 +10,28 @@
     "frontendDist": "../dist"
   },
   "app": {
+    "macOSPrivateApi": true,
     "windows": [
       {
+        "label": "main",
         "title": "RabbitCoding",
         "width": 800,
         "height": 600,
         "titleBarStyle": "Overlay",
         "hiddenTitle": true
+      },
+      {
+        "label": "pet",
+        "title": "Rabbit Pet",
+        "url": "index.html?window=pet",
+        "width": 320,
+        "height": 280,
+        "decorations": false,
+        "transparent": true,
+        "resizable": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "shadow": false
       }
     ],
     "security": {

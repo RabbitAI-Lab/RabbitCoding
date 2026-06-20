@@ -12,6 +12,7 @@
 import { memo, useEffect, useRef, useState } from 'react';
 import { Brain, ChevronDown } from 'lucide-react';
 import { useI18n } from '../../i18n/useI18n';
+import { useLocalStorage } from '../../hooks/useLocalStorage';
 
 interface ThinkingBlockProps {
   thinking: string;
@@ -21,7 +22,8 @@ interface ThinkingBlockProps {
 
 function ThinkingBlockInner({ thinking, durationMs, isStreaming }: ThinkingBlockProps) {
   const { t } = useI18n();
-  const [expanded, setExpanded] = useState(false);
+  const [autoCollapseThinking] = useLocalStorage('pref-auto-collapse-thinking', false);
+  const [expanded, setExpanded] = useState(!autoCollapseThinking);
   // 流式期间的实时计时（100ms 精度）
   const [liveMs, setLiveMs] = useState(0);
   const startRef = useRef(0);
