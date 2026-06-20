@@ -91,8 +91,8 @@ export default function RabbitItem({
 
   return (
     <div
-      className={`group flex items-center gap-1 rounded-md -mx-1.5 px-1.5 h-[30px] cursor-pointer ${
-        isSelected ? 'bg-blue-100/60 text-[#141414] dark:bg-blue-900/40 dark:text-gray-100' : 'hover:bg-gray-200/40 text-[#646261] hover:text-[#141414] dark:hover:bg-gray-700/40 dark:text-gray-400 dark:hover:text-white'
+      className={`group flex items-center gap-1 rounded-md -mx-1.5 px-1.5 h-[30px] cursor-pointer select-none ${
+        isSelected ? 'bg-[#e7e7e3] text-[#141414] dark:bg-[#292926] dark:text-gray-100' : 'hover:bg-gray-200/40 text-[#646261] hover:text-[#141414] dark:hover:bg-gray-700/40 dark:text-gray-400 dark:hover:text-white'
       }`}
       onClick={onSelect}
     >

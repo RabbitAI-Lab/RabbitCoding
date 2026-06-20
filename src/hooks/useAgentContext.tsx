@@ -68,6 +68,14 @@ interface AgentContextValue {
     queryId: string,
     requestId: string,
   ) => Promise<void>;
+  /** 回滚文件到指定 user message 的 checkpoint */
+  rewindFiles: (
+    queryId: string,
+    sessionId: string,
+    userMessageId: string,
+    cwd: string,
+    dryRun?: boolean,
+  ) => Promise<void>;
 }
 
 // ============================================================
@@ -167,6 +175,24 @@ export function AgentProvider({ store, children }: AgentProviderProps) {
         }
         case 'ask_user_question': {
           store.appendRabbitMessage(ws.id, queryId, message);
+          break;
+        }
+        case 'user_message_uuid': {
+          // SDK 分配的 user message uuid，更新对应 UserMessage 的 userMessageId
+          const uuidMsg = message as import('../types').UserMessageUuidMessage;
+          store.updateUserMessageId(ws.id, queryId, uuidMsg.sdkUuid);
+          break;
+        }
+        case 'rewind_result': {
+          // 文件回滚结果
+          const rewindMsg = message as import('../types').RewindResultMessage;
+          if (rewindMsg.success && rewindMsg.userMessageId) {
+            // 回滚成功：截断该 user message 之后的消息，重置 sessionId
+            store.rewindToCheckpoint(ws.id, queryId, rewindMsg.userMessageId);
+          } else {
+            // 回滚失败：追加错误消息到聊天流
+            store.appendRabbitMessage(ws.id, queryId, message);
+          }
           break;
         }
         case 'usage_update': {
@@ -270,6 +296,17 @@ export function AgentProvider({ store, children }: AgentProviderProps) {
     await agent.respondToolRequest(requestId, {}, undefined, true);
   }, [agent, store]);
 
+  // 回滚文件到指定 user message 的 checkpoint
+  const rewindFiles = useCallback(async (
+    queryId: string,
+    sessionId: string,
+    userMessageId: string,
+    cwd: string,
+    dryRun?: boolean,
+  ) => {
+    await agent.rewindFiles(queryId, sessionId, userMessageId, cwd, dryRun);
+  }, [agent]);
+
   const value: AgentContextValue = {
     sidecarStatus: agent.sidecarStatus,
     startSidecar: agent.startSidecar,
@@ -281,6 +318,7 @@ export function AgentProvider({ store, children }: AgentProviderProps) {
     compactQuery: agent.compactQuery,
     respondToQuestion,
     cancelQuestion,
+    rewindFiles,
   };
 
   return <AgentContext.Provider value={value}>{children}</AgentContext.Provider>;

@@ -13,6 +13,7 @@ import {
   handleResumeQuery,
   handleCancelQuery,
   handleCompactQuery,
+  handleRewindFiles,
   shutdownAll,
   resolvePendingToolRequest,
 } from "./agent.js";
@@ -62,6 +63,14 @@ async function handleCommand(msg: InboundMessage): Promise<void> {
       log(`compact_query: id=${msg.id}, sessionId=${msg.sessionId}`);
       handleCompactQuery(msg).catch((err) => {
         log(`compact_query error: ${err}`);
+        sendError(msg.id, err instanceof Error ? err.message : String(err));
+      });
+      break;
+
+    case "rewind_files":
+      log(`rewind_files: id=${msg.id}, sessionId=${msg.sessionId}, userMessageId=${msg.userMessageId}`);
+      handleRewindFiles(msg).catch((err) => {
+        log(`rewind_files error: ${err}`);
         sendError(msg.id, err instanceof Error ? err.message : String(err));
       });
       break;

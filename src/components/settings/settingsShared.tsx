@@ -60,7 +60,7 @@ export function Toggle({
         onChange={e => onChange(e.target.checked)}
         className="peer sr-only"
       />
-      <div className="h-5 w-9 rounded-full bg-gray-300 dark:bg-gray-600 transition-colors after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-white after:transition-transform after:content-[''] peer-checked:bg-blue-600 peer-checked:after:translate-x-4" />
+      <div className="h-5 w-9 rounded-full bg-gray-300 dark:bg-gray-600 transition-colors after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-white after:transition-transform after:content-[''] peer-checked:bg-[var(--brand-solid)] peer-checked:after:translate-x-4" />
     </label>
   );
 }

@@ -1,0 +1,10 @@
+schema_version: 1
+module_path: sidecar
+title: Claude Agent SDK 桥接服务
+scope:
+    - sidecar/
+source_files: []
+depends_on: []
+related_to:
+    - path: frontend
+    - path: tauri_backend

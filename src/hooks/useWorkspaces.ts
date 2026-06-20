@@ -303,7 +303,14 @@ export function useWorkspaces() {
 
   const selectRabbit = useCallback((rabbitId: string | null) => {
     setSelectedRabbitId(rabbitId || null);
-  }, [setSelectedRabbitId]);
+    // 同步更新 selectedWorkspaceId：确保 selectedRabbit 能在 ContentArea 中被正确查找
+    if (rabbitId) {
+      const ws = workspacesRef.current.find(w => w.rabbits.some(r => r.id === rabbitId));
+      if (ws) {
+        setSelectedWorkspaceId(ws.id);
+      }
+    }
+  }, [setSelectedRabbitId, setSelectedWorkspaceId]);
 
   const startEdit = useCallback((id: string) => {
     setEditingId(id);
@@ -325,7 +332,7 @@ export function useWorkspaces() {
   const updateRabbitAgent = useCallback((
     workspaceId: string,
     rabbitId: string,
-    updates: Partial<Pick<Rabbit, 'sessionId' | 'status' | 'messages' | 'costUsd' | 'durationMs' | 'error' | 'tokenUsage' | 'currentUsage' | 'numTurns' | 'specFilePaths' | 'compactionPhase'>>,
+    updates: Partial<Pick<Rabbit, 'sessionId' | 'status' | 'messages' | 'costUsd' | 'durationMs' | 'error' | 'tokenUsage' | 'currentUsage' | 'numTurns' | 'specFilePaths' | 'compactionPhase' | 'worktree'>>,
   ) => {
     setWorkspaces(prev => prev.map(p =>
       p.id === workspaceId
@@ -475,6 +482,23 @@ export function useWorkspaces() {
     ));
   }, [setWorkspaces]);
 
+  // 清除 Rabbit 的 worktree 信息（置空 rabbit.worktree）
+  const clearWorktree = useCallback((
+    workspaceId: string,
+    rabbitId: string,
+  ) => {
+    setWorkspaces(prev => prev.map(p =>
+      p.id === workspaceId
+        ? {
+            ...p,
+            rabbits: p.rabbits.map(t =>
+              t.id === rabbitId ? { ...t, worktree: undefined } : t
+            ),
+          }
+        : p
+    ));
+  }, [setWorkspaces]);
+
   // 更新最后一条 thinking 消息的 durationMs
   const updateThinkingDuration = useCallback((
     workspaceId: string,
@@ -500,6 +524,112 @@ export function useWorkspaces() {
           }
         : p
     ));
+  }, [setWorkspaces]);
+
+  // 更新最后一条 UserMessage 的 userMessageId（SDK 分配的 uuid）
+  const updateUserMessageId = useCallback((
+    workspaceId: string,
+    rabbitId: string,
+    sdkUuid: string,
+  ) => {
+    setWorkspaces(prev => prev.map(p =>
+      p.id === workspaceId
+        ? {
+            ...p,
+            rabbits: p.rabbits.map(t => {
+              if (t.id !== rabbitId) return t;
+              const msgs = [...t.messages];
+              // 从后往前找最后一条 user 消息
+              for (let i = msgs.length - 1; i >= 0; i--) {
+                if (msgs[i].type === 'user') {
+                  msgs[i] = { ...msgs[i], userMessageId: sdkUuid } as any;
+                  break;
+                }
+              }
+              return { ...t, messages: msgs };
+            }),
+          }
+        : p
+    ));
+  }, [setWorkspaces]);
+
+  // 回滚到指定 checkpoint：截断该 user message 之后的所有消息，重置 sessionId
+  const rewindToCheckpoint = useCallback((
+    workspaceId: string,
+    rabbitId: string,
+    userMessageId: string,
+  ) => {
+    setWorkspaces(prev => prev.map(p =>
+      p.id === workspaceId
+        ? {
+            ...p,
+            rabbits: p.rabbits.map(t => {
+              if (t.id !== rabbitId) return t;
+              // 找到目标 user message 的索引
+              const targetIdx = t.messages.findIndex(
+                m => m.type === 'user' && (m as any).userMessageId === userMessageId
+              );
+              if (targetIdx === -1) return t;
+              // 截断：保留到目标 user message（含），删除之后的所有消息
+              const truncatedMessages = t.messages.slice(0, targetIdx + 1);
+              return {
+                ...t,
+                messages: truncatedMessages,
+                sessionId: undefined, // 重置 sessionId，后续 prompt 作为新会话发送
+                status: 'idle' as const,
+                error: undefined,
+              };
+            }),
+          }
+        : p
+    ));
+  }, [setWorkspaces]);
+
+  // 截断从指定 user message 开始（含）的所有消息，重置 sessionId
+  // 用于点击 user 消息编辑重发：删除该消息及之后的所有消息
+  const truncateFromMessage = useCallback((
+    workspaceId: string,
+    rabbitId: string,
+    userMessageId: string,
+  ) => {
+    setWorkspaces(prev => prev.map(p =>
+      p.id === workspaceId
+        ? {
+            ...p,
+            rabbits: p.rabbits.map(t => {
+              if (t.id !== rabbitId) return t;
+              const targetIdx = t.messages.findIndex(
+                m => m.type === 'user' && (m as any).userMessageId === userMessageId
+              );
+              if (targetIdx === -1) return t;
+              // 截断：删除目标消息及之后的所有消息
+              const truncatedMessages = t.messages.slice(0, targetIdx);
+              return {
+                ...t,
+                messages: truncatedMessages,
+                sessionId: undefined,
+                status: 'idle' as const,
+                error: undefined,
+              };
+            }),
+          }
+        : p
+    ));
+  }, [setWorkspaces]);
+
+  // Workspace 拖拽排序：sourceId 插入到 targetId 的 before/after 位置
+  const reorderWorkspace = useCallback((sourceId: string, targetId: string, insertBefore: boolean) => {
+    setWorkspaces(prev => {
+      const sourceIdx = prev.findIndex(w => w.id === sourceId);
+      const targetIdx = prev.findIndex(w => w.id === targetId);
+      if (sourceIdx === -1 || targetIdx === -1 || sourceIdx === targetIdx) return prev;
+
+      const next = [...prev];
+      const [removed] = next.splice(sourceIdx, 1);
+      const newTargetIdx = next.findIndex(w => w.id === targetId);
+      next.splice(insertBefore ? newTargetIdx : newTargetIdx + 1, 0, removed);
+      return next;
+    });
   }, [setWorkspaces]);
 
   return {
@@ -536,5 +666,10 @@ export function useWorkspaces() {
     appendDeltaToLastMessage,
     updateThinkingDuration,
     updateAskUserQuestionStatus,
+    clearWorktree,
+    updateUserMessageId,
+    rewindToCheckpoint,
+    truncateFromMessage,
+    reorderWorkspace,
   };
 }

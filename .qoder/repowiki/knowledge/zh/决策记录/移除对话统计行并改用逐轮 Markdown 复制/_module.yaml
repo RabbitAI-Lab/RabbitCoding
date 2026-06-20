@@ -1,0 +1,7 @@
+schema_version: 1
+module_path: decisions/dc1bf71b0528_6cbc3bc6c60c
+title: 移除对话统计行并改用逐轮 Markdown 复制
+scope: []
+source_files: []
+depends_on: []
+related_to: []

@@ -1,5 +1,5 @@
-import { useMemo } from 'react';
-import { BookOpen, Loader2, RefreshCw, Sparkles } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { BookOpen, Carrot, Loader2, RefreshCw } from 'lucide-react';
 import type { Workspace } from '../types';
 import { useI18n } from '../i18n/useI18n';
 import { useWikiState } from './wiki/useWikiState';
@@ -64,7 +64,14 @@ export default function KnowledgeBasePage({ workspace }: KnowledgeBasePageProps)
     </div>
   );
 
-  const showSetup = !workspace?.path || (!hasCodeWiki && !generating);
+  const [forceSetup, setForceSetup] = useState(false);
+
+  // 开始生成后自动退出强制设置页
+  useEffect(() => {
+    if (generating) setForceSetup(false);
+  }, [generating]);
+
+  const showSetup = !workspace?.path || (!hasCodeWiki && !generating) || forceSetup;
 
   // 从 Map 构建 Set 供树组件快速查找
   const failedFilePaths = useMemo(
@@ -94,11 +101,11 @@ export default function KnowledgeBasePage({ workspace }: KnowledgeBasePageProps)
         {workspace?.path && (
           <div className="ml-auto flex items-center gap-2">
             <button
-              onClick={handleGenerateAIWiki}
-              disabled={generating || !selectedModel}
-              className="flex items-center gap-1 rounded-md bg-blue-600 px-2.5 py-1 text-xs font-medium text-blue-50 transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+              onClick={() => setForceSetup(true)}
+              disabled={generating}
+              className="flex items-center gap-1 rounded-md border border-[var(--brand-soft-border)] px-2.5 py-1 text-xs font-medium text-[var(--brand-primary)] transition-colors hover:bg-[var(--brand-soft-bg)] disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {generating && queueStatus.current ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
+              {generating && queueStatus.current ? <Loader2 size={13} className="animate-spin" /> : <Carrot size={13} />}
               {t('knowledgeBase.aiGenerate')}
             </button>
           </div>
@@ -162,7 +169,7 @@ export default function KnowledgeBasePage({ workspace }: KnowledgeBasePageProps)
                 </div>
 
                 {/* 两层目录树 */}
-                <div className="min-h-0 flex-1 overflow-auto">
+                <div className="thin-scrollbar min-h-0 flex-1 overflow-auto">
                   {loadingTree ? (
                     <div className="flex h-full items-center justify-center gap-2 text-gray-300 dark:text-gray-600">
                       <Loader2 size={14} className="animate-spin" />
@@ -212,7 +219,6 @@ export default function KnowledgeBasePage({ workspace }: KnowledgeBasePageProps)
                 generating={generating}
                 selectedModel={selectedModel}
                 treeError={treeError}
-                onGenerate={handleGenerate}
                 onGenerateAIWiki={handleGenerateAIWiki}
                 onUpdateConfig={updateConfig}
               />

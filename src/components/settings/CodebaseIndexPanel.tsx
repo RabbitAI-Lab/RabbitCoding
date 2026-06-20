@@ -164,7 +164,7 @@ function IndexItemRow({
             ? 'bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-600 cursor-not-allowed'
             : item.status === 'indexed'
               ? 'border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
-              : 'bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600'
+              : 'bg-[var(--brand-solid)] text-white hover:bg-[var(--brand-solid-hover)]'
         }`}
       >
         {isIndexing ? (
@@ -438,7 +438,7 @@ export default function CodebaseIndexPanel() {
           {!installed && !isInstalling && (
             <button
               onClick={() => installGitnexus()}
-              className="flex items-center gap-1.5 shrink-0 rounded-md px-3 py-1.5 text-xs font-medium bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 transition-colors"
+              className="flex items-center gap-1.5 shrink-0 rounded-md px-3 py-1.5 text-xs font-medium bg-[var(--brand-solid)] text-white hover:bg-[var(--brand-solid-hover)] transition-colors"
             >
               <Download size={13} />
               {t('settings.codebaseIndex.install')}

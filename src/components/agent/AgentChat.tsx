@@ -3,13 +3,15 @@
  *
  * 展示一个 Rabbit 任务的完整 Agent 对话流。
  * 处理消息的关联（tool_use ↔ tool_result）、合并连续文本、自动滚动等。
+ * 点击吸顶 user 消息 → 直接在消息位置变为 inline textarea 编辑 → 发送即 rewind。
  */
 
-import { useEffect, useRef, useMemo } from 'react';
+import { useEffect, useRef, useMemo, useState, useCallback } from 'react';
 import { Loader2, Archive } from 'lucide-react';
+import { Sender } from '@ant-design/x';
 import { AgentMessageItem } from './AgentMessage';
 import { CopyMarkdownButton } from './CopyMarkdownButton';
-import type { AgentMessage, AssistantToolUseMessage, AssistantTextMessage, UsageUpdateMessage, ToolResultMessage, Rabbit } from '../../types';
+import type { AgentMessage, AssistantToolUseMessage, AssistantTextMessage, UsageUpdateMessage, ToolResultMessage, Rabbit, UserMessage } from '../../types';
 import { useI18n } from '../../i18n/useI18n';
 import { useLocalStorage } from '../../hooks/useLocalStorage';
 import { formatTokens } from '../../hooks/useUsage';
@@ -18,6 +20,10 @@ interface AgentChatProps {
   rabbit: Rabbit;
   /** Spec 确认后启动编码查询 */
   onSpecRun?: (rabbitId: string) => void;
+  /** inline 编辑提交：触发 rewind + 重发 */
+  onEditUserMessage?: (text: string, userMessageId?: string) => void;
+  /** Sender footer 渲染回调：inline 编辑时复用底部 Sender 的完整 footer（模型选择、Spec开关、提示词优化等） */
+  renderSenderFooter?: (context: { value: string; components: { SendButton: React.ComponentType<any>; LoadingButton: React.ComponentType<any> }; showUsage?: boolean }) => React.ReactNode;
 }
 
 interface DisplayItem {
@@ -31,13 +37,6 @@ interface MessageGroup {
   /** 组内非 user 消息 */
   items: DisplayItem[];
 }
-
-/**
- * 预处理消息列表：构建 tool_use_id → tool_result 的映射，
- * 过滤掉单独的 tool_result，并按 user 消息分组。
- * 每个 user 消息开新组，后续非 user 消息归入该组，
- * 使 sticky 约束矩形限定在组内，实现“下一条推走上条”的效果。
- */
 
 /** 隐藏的内部工具调用：仅渲染对应的交互卡片，不展示原始 tool_use 块 */
 const HIDDEN_TOOLS = new Set([
@@ -100,13 +99,17 @@ function processMessages(messages: AgentMessage[]): MessageGroup[] {
   return groups;
 }
 
-export default function AgentChat({ rabbit, onSpecRun }: AgentChatProps) {
+export default function AgentChat({ rabbit, onSpecRun, onEditUserMessage, renderSenderFooter }: AgentChatProps) {
   const { t } = useI18n();
   const scrollRef = useRef<HTMLDivElement>(null);
   const isAtBottomRef = useRef(true);
   const prevMsgCountRef = useRef(rabbit.messages.length);
   const isRunning = rabbit.status === 'running';
   const [showTokenUsage] = useLocalStorage('pref-show-token-usage', false);
+
+  // inline 编辑状态：正在编辑的 group 索引
+  const [editingGroupIdx, setEditingGroupIdx] = useState<number | null>(null);
+  const [editValue, setEditValue] = useState('');
 
   // 预处理消息（分组）
   const groups = useMemo(() => processMessages(rabbit.messages), [rabbit.messages]);
@@ -146,6 +149,45 @@ export default function AgentChat({ rabbit, onSpecRun }: AgentChatProps) {
     }
   }, [rabbit.messages, isRunning]);
 
+  // 中文输入法正在输入时，回车用于确认候选词，不发送消息
+  const imeComposingRef = useRef(false);
+
+  // 提交编辑：调用 onEditUserMessage 触发 rewind + 重发
+  const submitEdit = useCallback(() => {
+    const trimmed = editValue.trim();
+    if (!trimmed || editingGroupIdx === null) return;
+    const group = groups[editingGroupIdx];
+    if (!group?.userItem) return;
+    const userMsg = group.userItem.message as UserMessage;
+    onEditUserMessage?.(trimmed, userMsg.userMessageId);
+    setEditingGroupIdx(null);
+    setEditValue('');
+  }, [editValue, editingGroupIdx, groups, onEditUserMessage]);
+
+  // 开始 inline 编辑：点击 user 消息后，消息变为 Sender
+  const startEditing = useCallback((groupIdx: number) => {
+    const group = groups[groupIdx];
+    if (!group?.userItem) return;
+    const userMsg = group.userItem.message as UserMessage;
+    setEditValue(userMsg.text);
+    setEditingGroupIdx(groupIdx);
+  }, [groups]);
+
+  // 取消编辑
+  const cancelEditing = useCallback(() => {
+    setEditingGroupIdx(null);
+    setEditValue('');
+  }, []);
+
+  // Sender 键盘事件：IME 组合中不发送
+  const handleEditKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      if (imeComposingRef.current || e.nativeEvent.isComposing) {
+        return false;
+      }
+    }
+  }, []);
+
   if (rabbit.messages.length === 0) {
     return (
       <div className="flex h-full items-center justify-center text-gray-400 dark:text-gray-500">
@@ -177,11 +219,39 @@ export default function AgentChat({ rabbit, onSpecRun }: AgentChatProps) {
         <div className="max-w-3xl mx-auto space-y-1 -mt-[58px] pt-[8px]">
           {groups.map((group, gi) => {
             const isLastGroup = gi === groups.length - 1;
+            const isEditingThis = editingGroupIdx === gi;
             return (
               <div key={gi} className="space-y-1">
                 {group.userItem && (
                   <div className="sticky top-[8px] z-30 pb-2">
-                    <AgentMessageItem message={group.userItem.message} rabbitId={rabbit.id} onSpecRun={onSpecRun} />
+                    {isEditingThis ? (
+                      // inline 编辑模式：user 消息位置变为 Sender 组件，复用底部 Sender 的完整 footer
+                      <Sender
+                        value={editValue}
+                        onChange={setEditValue}
+                        onSubmit={submitEdit}
+                        onKeyDown={handleEditKeyDown}
+                        onCancel={cancelEditing}
+                        loading={false}
+                        placeholder={t('contentArea.followUpPlaceholder')}
+                        autoSize={{ minRows: 3, maxRows: 10 }}
+                        suffix={false}
+                        styles={{ content: { paddingTop: 2 }, footer: { paddingBottom: 6 } }}
+                        footer={(_, { components: { SendButton, LoadingButton } }) =>
+                          renderSenderFooter
+                            ? renderSenderFooter({ value: editValue, components: { SendButton, LoadingButton }, showUsage: false })
+                            : <SendButton style={{ width: 20, height: 20, minWidth: 20, fontSize: 12, padding: 0, backgroundColor: editValue.trim() ? 'var(--brand-solid)' : '#C4C4C4', color: '#ffffff', border: 'none' }} />
+                        }
+                      />
+                    ) : (
+                      // 正常展示模式：可点击进入编辑
+                      <AgentMessageItem
+                        message={group.userItem.message}
+                        rabbitId={rabbit.id}
+                        onSpecRun={onSpecRun}
+                        onEditUserMessage={!isRunning && onEditUserMessage ? () => startEditing(gi) : undefined}
+                      />
+                    )}
                   </div>
                 )}
                 {group.items.map((item, ii) => {

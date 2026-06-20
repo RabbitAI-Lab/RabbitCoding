@@ -24,7 +24,7 @@ export default function AgentScopeCard({
   return (
     <button
       onClick={onClick}
-      className="group flex items-center gap-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1e1e1e] px-5 py-3.5 text-left hover:border-blue-300 dark:hover:border-blue-700 hover:shadow-sm transition-all"
+      className="group flex items-center gap-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1e1e1e] px-5 py-3.5 text-left hover:border-[var(--brand-primary)] hover:shadow-sm transition-all"
     >
       {/* 图标 */}
       <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gray-100 dark:bg-gray-800">
@@ -37,7 +37,7 @@ export default function AgentScopeCard({
             {title}
           </span>
           {badge && (
-            <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
+            <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] bg-[var(--brand-soft-bg)] text-[var(--brand-primary)]">
               {badge}
             </span>
           )}
@@ -49,7 +49,7 @@ export default function AgentScopeCard({
       {/* 右箭头 */}
       <ChevronRight
         size={16}
-        className="shrink-0 text-gray-300 dark:text-gray-600 group-hover:text-blue-500 transition-colors"
+        className="shrink-0 text-gray-300 dark:text-gray-600 group-hover:text-[var(--brand-primary)] transition-colors"
       />
     </button>
   );

@@ -232,7 +232,7 @@ export default function FeedbackPanel({ autoCapture = true }: { autoCapture?: bo
           <button
             onClick={handleRecapture}
             disabled={capturing}
-            className="flex aspect-video w-full items-center justify-center gap-2 rounded-lg border border-dashed border-gray-300 dark:border-gray-600 text-gray-400 hover:border-blue-400 hover:text-blue-500 dark:text-gray-500 dark:hover:border-blue-400 dark:hover:text-blue-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex aspect-video w-full items-center justify-center gap-2 rounded-lg border border-dashed border-gray-300 dark:border-gray-600 text-gray-400 hover:border-[var(--brand-primary)] hover:text-[var(--brand-primary)] dark:text-gray-500 dark:hover:border-[var(--brand-primary)] dark:hover:text-[var(--brand-primary)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Camera size={20} />
             <span className="text-xs">{t('settings.feedback.screenshots.captureApp')}</span>
@@ -263,7 +263,7 @@ export default function FeedbackPanel({ autoCapture = true }: { autoCapture?: bo
               onChange={e => setSteps(e.target.value)}
               placeholder={t('settings.feedback.issueForm.stepsPlaceholder')}
               rows={4}
-              className="mt-1 w-full resize-none rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs text-gray-700 placeholder:text-gray-400 focus:border-blue-400 focus:outline-none dark:border-gray-600 dark:bg-[#2a2a2a] dark:text-gray-200 dark:placeholder:text-gray-500"
+              className="mt-1 w-full resize-none rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs text-gray-700 placeholder:text-gray-400 focus:border-[var(--brand-primary)] focus:outline-none dark:border-gray-600 dark:bg-[#2a2a2a] dark:text-gray-200 dark:placeholder:text-gray-500"
             />
           </div>
 
@@ -277,7 +277,7 @@ export default function FeedbackPanel({ autoCapture = true }: { autoCapture?: bo
               onChange={e => setExpected(e.target.value)}
               placeholder={t('settings.feedback.issueForm.expectedPlaceholder')}
               rows={3}
-              className="mt-1 w-full resize-none rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs text-gray-700 placeholder:text-gray-400 focus:border-blue-400 focus:outline-none dark:border-gray-600 dark:bg-[#2a2a2a] dark:text-gray-200 dark:placeholder:text-gray-500"
+              className="mt-1 w-full resize-none rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs text-gray-700 placeholder:text-gray-400 focus:border-[var(--brand-primary)] focus:outline-none dark:border-gray-600 dark:bg-[#2a2a2a] dark:text-gray-200 dark:placeholder:text-gray-500"
             />
           </div>
 
@@ -291,7 +291,7 @@ export default function FeedbackPanel({ autoCapture = true }: { autoCapture?: bo
                 type="datetime-local"
                 value={occurredAt}
                 onChange={e => setOccurredAt(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs text-gray-700 focus:border-blue-400 focus:outline-none dark:border-gray-600 dark:bg-[#2a2a2a] dark:text-gray-200"
+                className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs text-gray-700 focus:border-[var(--brand-primary)] focus:outline-none dark:border-gray-600 dark:bg-[#2a2a2a] dark:text-gray-200"
               />
             </div>
             <div>
@@ -303,7 +303,7 @@ export default function FeedbackPanel({ autoCapture = true }: { autoCapture?: bo
                 value={email}
                 onChange={e => setEmail(e.target.value)}
                 placeholder={t('settings.feedback.issueForm.emailPlaceholder')}
-                className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs text-gray-700 placeholder:text-gray-400 focus:border-blue-400 focus:outline-none dark:border-gray-600 dark:bg-[#2a2a2a] dark:text-gray-200 dark:placeholder:text-gray-500"
+                className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs text-gray-700 placeholder:text-gray-400 focus:border-[var(--brand-primary)] focus:outline-none dark:border-gray-600 dark:bg-[#2a2a2a] dark:text-gray-200 dark:placeholder:text-gray-500"
               />
             </div>
           </div>
@@ -384,7 +384,7 @@ export default function FeedbackPanel({ autoCapture = true }: { autoCapture?: bo
           </div>
         ) : (
           <div className="flex items-center justify-center py-6">
-            <Loader2 size={16} className="text-blue-500 dark:text-blue-400 animate-spin" />
+            <Loader2 size={16} className="text-[var(--brand-primary)] animate-spin" />
           </div>
         )}
       </SettingSection>
@@ -448,7 +448,7 @@ export default function FeedbackPanel({ autoCapture = true }: { autoCapture?: bo
         <button
           onClick={handleSubmit}
           disabled={submitState === 'submitting'}
-          className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs text-white bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs text-white bg-[var(--brand-solid)] hover:bg-[var(--brand-solid-hover)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           {submitState === 'submitting' ? (
             <>

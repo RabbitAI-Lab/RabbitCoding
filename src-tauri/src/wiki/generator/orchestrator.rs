@@ -7,7 +7,7 @@ use tauri::{AppHandle, Emitter};
 use crate::wiki::queue::WikiTask;
 use crate::wiki::types::{WikiMeta, WikiProgress};
 
-use super::helpers::{check_circuit_breaker, GenCtx};
+use super::helpers::{check_circuit_breaker, is_target_scope, GenCtx};
 use super::meta::{chrono_timestamp, clear_output_dir, load_or_init_meta, save_meta};
 use super::repo::generate_repo_wiki;
 use super::workspace::generate_workspace_wiki;
@@ -66,6 +66,10 @@ pub(crate) async fn execute_wiki_generation(
     // 第一层：代码库级 wiki
     // ========================
     for repo in &payload.repos {
+        // 定向生成：跳过非目标 repo
+        if !is_target_scope(payload, Some(&repo.name)) {
+            continue;
+        }
         generate_repo_wiki(&ctx, &repos_wiki_dir, &mut meta, &mut consecutive_failures, repo)
             .await?;
     }
@@ -86,15 +90,18 @@ pub(crate) async fn execute_wiki_generation(
     // ========================
     // 第二层：项目空间级 wiki
     // ========================
-    generate_workspace_wiki(
-        &ctx,
-        workspace_path,
-        &workspace_wiki_dir,
-        &repos_wiki_dir,
-        &mut meta,
-        &mut consecutive_failures,
-    )
-    .await?;
+    // 定向生成：目标为某 repo 时跳过 workspace 级
+    if is_target_scope(payload, None) {
+        generate_workspace_wiki(
+            &ctx,
+            workspace_path,
+            &workspace_wiki_dir,
+            &repos_wiki_dir,
+            &mut meta,
+            &mut consecutive_failures,
+        )
+        .await?;
+    }
 
     // 最终状态更新
     meta.status = if meta.failed_docs.is_empty() {

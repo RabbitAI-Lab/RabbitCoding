@@ -31,6 +31,11 @@ interface WorkspaceItemProps {
   onStartEditRabbit: (rabbitId: string) => void;
   onTogglePin: (rabbitId: string) => void;
   onOpenKnowledgeBase: () => void;
+  // 拖拽视觉状态（拖拽逻辑由外层处理）
+  isDragging?: boolean;
+  isDragOver?: boolean;
+  dragOverPosition?: 'before' | 'after';
+  isDragDisabled?: boolean;
 }
 
 const MAX_VISIBLE_RABBITS = 5;
@@ -59,6 +64,9 @@ export default function WorkspaceItem(props: WorkspaceItemProps) {
     onStartEditRabbit,
     onTogglePin,
     onOpenKnowledgeBase,
+    isDragging,
+    isDragOver,
+    dragOverPosition,
   } = props;
   const editRef = useRef<HTMLInputElement>(null);
   const [editValue, setEditValue] = useState(workspace.name);
@@ -162,8 +170,17 @@ export default function WorkspaceItem(props: WorkspaceItemProps) {
   const visibleRabbits = showAllRabbits ? sortedRabbits : sortedRabbits.slice(0, MAX_VISIBLE_RABBITS);
   const hasMoreRabbits = sortedRabbits.length > MAX_VISIBLE_RABBITS;
 
+  const dragOverLineClass = isDragOver
+    ? dragOverPosition === 'before'
+      ? 'border-t-2 border-[var(--brand-primary)]'
+      : 'border-b-2 border-[var(--brand-primary)]'
+    : '';
+
   return (
-    <div className="mb-0.5">
+    <div
+      className={`mb-0.5 relative ${dragOverLineClass} ${isDragging ? 'opacity-40' : 'opacity-100'}`}
+      style={isDragging ? { pointerEvents: 'none' } : undefined}
+    >
       <div
         className="group flex items-center gap-1 rounded-md px-0 py-1.5 cursor-pointer text-gray-700 dark:text-gray-300"
         onClick={() => { onToggleCollapse(); }}
@@ -202,9 +219,17 @@ export default function WorkspaceItem(props: WorkspaceItemProps) {
         {/* Action buttons (visible on hover) */}
         {!isEditing && (
           <div className="flex shrink-0 justify-end gap-0.5">
+            <Tooltip content={t('sidebar.workspaceItem.knowledgeBase')}>
+              <button
+                className="flex items-center justify-center rounded p-0.5 text-gray-400 hover:text-[var(--brand-primary)] opacity-0 group-hover:opacity-100"
+                onClick={(e) => { e.stopPropagation(); onOpenKnowledgeBase(); }}
+              >
+                <BookOpen size={12} />
+              </button>
+            </Tooltip>
             <Tooltip content={t('common.more')}>
               <button
-                className="flex items-center justify-center rounded p-0.5 text-gray-400 hover:text-blue-600 opacity-0 group-hover:opacity-100"
+                className="flex items-center justify-center rounded p-0.5 text-gray-400 hover:text-[var(--brand-primary)] opacity-0 group-hover:opacity-100"
                 onClick={handleDropdownClick}
               >
                 <MoreHorizontal size={12} />
@@ -212,7 +237,7 @@ export default function WorkspaceItem(props: WorkspaceItemProps) {
             </Tooltip>
             <Tooltip content={t('sidebar.workspaceItem.createRabbit')}>
               <button
-                className="flex items-center justify-center rounded p-0.5 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 opacity-0 group-hover:opacity-100"
+                className="flex items-center justify-center rounded p-0.5 text-gray-400 hover:text-[var(--brand-primary)] opacity-0 group-hover:opacity-100"
                 onClick={handleAddClick}
               >
                 <Plus size={12} />

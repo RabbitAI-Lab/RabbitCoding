@@ -58,6 +58,16 @@ export interface RespondToolRequestCommand {
   cancelled?: boolean;
 }
 
+/** 回滚文件到指定 user message 的 checkpoint */
+export interface RewindFilesCommand {
+  type: "rewind_files";
+  id: string;              // queryId（用于事件路由）
+  sessionId: string;       // 目标会话
+  userMessageId: string;   // 回滚到此 user message
+  cwd: string;
+  dryRun?: boolean;
+}
+
 /** 查询选项 */
 export interface QueryOptions {
   model: string;
@@ -75,6 +85,7 @@ export type InboundMessage =
   | CancelQueryCommand
   | CompactQueryCommand
   | RespondToolRequestCommand
+  | RewindFilesCommand
   | ShutdownCommand;
 
 // ============================================================
@@ -104,7 +115,9 @@ export type AgentMessage =
   | CompactionResultMessage
   | UsageUpdateMessage
   | AskUserQuestionMessage
-  | SpecWrittenMessage;
+  | SpecWrittenMessage
+  | RewindResultMessage
+  | UserMessageUuidMessage;
 
 /** 系统初始化消息 */
 export interface SystemInitMessage {
@@ -248,4 +261,22 @@ export interface SpecWrittenMessage {
   type: "spec_written";
   specContent: string;
   specFilePath: string;
+}
+
+/** 文件回滚结果消息 */
+export interface RewindResultMessage {
+  type: "rewind_result";
+  success: boolean;
+  error?: string;
+  filesChanged?: string[];
+  insertions?: number;
+  deletions?: number;
+  dryRun?: boolean;
+  userMessageId?: string;  // 回滚的目标 user message ID（供前端截断消息）
+}
+
+/** SDK 分配的 user message uuid（用于 rewindFiles checkpoint） */
+export interface UserMessageUuidMessage {
+  type: "user_message_uuid";
+  sdkUuid: string;
 }

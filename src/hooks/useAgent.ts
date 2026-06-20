@@ -256,6 +256,28 @@ export function useAgent(options?: UseAgentOptions) {
   }, []);
 
   /**
+   * 回滚文件到指定 user message 的 checkpoint
+   * 复用 Claude SDK 的 rewindFiles 能力，从 file-history 恢复文件
+   */
+  const rewindFiles = useCallback(async (
+    queryId: string,
+    sessionId: string,
+    userMessageId: string,
+    cwd: string,
+    dryRun?: boolean,
+  ) => {
+    const command = {
+      type: 'rewind_files',
+      id: queryId,
+      sessionId,
+      userMessageId,
+      cwd,
+      dryRun,
+    };
+    await invoke('send_to_sidecar', { payload: { message: JSON.stringify(command) } });
+  }, []);
+
+  /**
    * 监听 Agent 消息事件（通过 ref 调用最新回调）
    * 使用 cancelled 标志防止 StrictMode async 竞态导致 listener 泄漏
    */
@@ -329,5 +351,6 @@ export function useAgent(options?: UseAgentOptions) {
     cancelQuery,
     compactQuery,
     respondToolRequest,
+    rewindFiles,
   };
 }

@@ -110,8 +110,8 @@ export default function SkillsPanel({ onLayoutChange }: SkillsPanelProps) {
           {/* 拖拽手柄 */}
           <div
             {...handleProps}
-            className={`absolute inset-y-0 right-0 w-1 cursor-col-resize transition-colors hover:bg-blue-500/40 ${
-              isResizing ? 'bg-blue-500/40' : ''
+            className={`absolute inset-y-0 right-0 w-1 cursor-col-resize transition-colors hover:bg-[var(--brand-primary)]/40 ${
+              isResizing ? 'bg-[var(--brand-primary)]/40' : ''
             }`}
           />
         </aside>

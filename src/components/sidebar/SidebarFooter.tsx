@@ -163,12 +163,12 @@ export default function SidebarFooter({ onOpenSettings, onOpenPluginMarket, isPl
   return (
     <>
       {/* Todo + 插件市场入口 */}
-      <div className="px-3 pb-1">
+      <div className="px-3 pb-1 select-none">
         <button
           onClick={onOpenTodo}
           className={`group flex w-full items-center gap-1 rounded-md -mx-1.5 px-1.5 py-1.5 cursor-pointer text-left transition-colors ${
             isTodoActive
-              ? 'bg-blue-100/60 text-[#141414] dark:bg-blue-900/40 dark:text-gray-100'
+              ? 'bg-[#e7e7e3] text-[#141414] dark:bg-[#292926] dark:text-gray-100'
               : 'hover:bg-gray-200/40 text-[#646261] hover:text-[#141414] dark:hover:bg-gray-700/40 dark:text-gray-400 dark:hover:text-white'
           }`}
         >
@@ -181,7 +181,7 @@ export default function SidebarFooter({ onOpenSettings, onOpenPluginMarket, isPl
           onClick={onOpenPluginMarket}
           className={`group flex w-full items-center gap-1 rounded-md -mx-1.5 px-1.5 py-1.5 cursor-pointer text-left transition-colors ${
             isPluginMarketActive
-              ? 'bg-blue-100/60 text-[#141414] dark:bg-blue-900/40 dark:text-gray-100'
+              ? 'bg-[#e7e7e3] text-[#141414] dark:bg-[#292926] dark:text-gray-100'
               : 'hover:bg-gray-200/40 text-[#646261] hover:text-[#141414] dark:hover:bg-gray-700/40 dark:text-gray-400 dark:hover:text-white'
           }`}
         >
@@ -193,7 +193,7 @@ export default function SidebarFooter({ onOpenSettings, onOpenPluginMarket, isPl
       </div>
 
       {/* 用户账号区域 */}
-      <div className="px-3 py-3">
+      <div className="px-3 py-3 select-none">
         {user ? (
           /* ---- 已登录状态：显示用户信息 ---- */
           <div className="flex items-center gap-2">
@@ -208,7 +208,7 @@ export default function SidebarFooter({ onOpenSettings, onOpenPluginMarket, isPl
               <button
                 ref={usageBtnRef}
                 onClick={toggleUsage}
-                className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-gray-400 hover:bg-gray-200 hover:text-blue-600 dark:text-gray-500 dark:hover:bg-gray-700 dark:hover:text-blue-300"
+                className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-gray-400 hover:bg-gray-200 hover:text-[var(--brand-primary)] dark:text-gray-500 dark:hover:bg-gray-700"
               >
                 <BarChart3 size={14} />
               </button>
@@ -217,7 +217,7 @@ export default function SidebarFooter({ onOpenSettings, onOpenPluginMarket, isPl
               <button
                 ref={settingsBtnRef}
                 onClick={toggleSettings}
-                className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-gray-400 hover:bg-gray-200 hover:text-blue-600 dark:text-gray-500 dark:hover:bg-gray-700 dark:hover:text-blue-300"
+                className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-gray-400 hover:bg-gray-200 hover:text-[var(--brand-primary)] dark:text-gray-500 dark:hover:bg-gray-700"
               >
                 <Settings size={14} />
               </button>
@@ -265,7 +265,7 @@ export default function SidebarFooter({ onOpenSettings, onOpenPluginMarket, isPl
           <div className="mb-2.5 last:mb-0">
             <div className="flex items-center justify-between text-[11px]">
               <span className="text-gray-500 dark:text-gray-400">{t('sidebar.footer.conversations')}</span>
-              <span className="font-semibold text-blue-600 dark:text-blue-300">{usageStats.totalConversations}</span>
+              <span className="font-semibold text-[var(--brand-primary)]">{usageStats.totalConversations}</span>
             </div>
           </div>
 
@@ -273,7 +273,7 @@ export default function SidebarFooter({ onOpenSettings, onOpenPluginMarket, isPl
           <div className="mb-2.5 last:mb-0">
             <div className="flex items-center justify-between text-[11px]">
               <span className="text-gray-500 dark:text-gray-400">{t('sidebar.footer.totalTurns')}</span>
-              <span className="font-semibold text-blue-600 dark:text-blue-300">{usageStats.totalTurns}</span>
+              <span className="font-semibold text-[var(--brand-primary)]">{usageStats.totalTurns}</span>
             </div>
           </div>
 
@@ -368,7 +368,7 @@ export default function SidebarFooter({ onOpenSettings, onOpenPluginMarket, isPl
                 onClick={() => handleThemeSelect(opt.value)}
                 className={`flex w-full items-center gap-2.5 px-3 py-2 text-left text-xs transition-colors ${
                   active
-                    ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-300'
+                    ? 'bg-[var(--brand-soft-bg)] text-[var(--brand-primary)]'
                     : 'text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700/60'
                 }`}
               >
@@ -406,7 +406,7 @@ export default function SidebarFooter({ onOpenSettings, onOpenPluginMarket, isPl
               onClick={() => handleLanguageSelect(opt.value)}
               className={`flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-xs transition-colors ${
                 language === opt.value
-                  ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-300'
+                  ? 'bg-[var(--brand-soft-bg)] text-[var(--brand-primary)]'
                   : 'text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700/60'
               }`}
             >

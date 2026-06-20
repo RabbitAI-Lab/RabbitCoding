@@ -35,7 +35,7 @@ export default function CustomAgentEditor({ open, config, onClose, onSave }: Cus
   }, [open, config]);
 
   const inputClass =
-    'w-full rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-[#2a2a2a] px-3 py-2 text-xs text-[#333333] dark:text-gray-100 placeholder-gray-300 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors';
+    'w-full rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-[#2a2a2a] px-3 py-2 text-xs text-[#333333] dark:text-gray-100 placeholder-gray-300 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[var(--brand-primary)]/20 focus:border-[var(--brand-primary)] transition-colors';
 
   const labelClass = 'block text-[11px] font-medium text-gray-500 dark:text-gray-400 mb-1';
 
@@ -112,7 +112,7 @@ export default function CustomAgentEditor({ open, config, onClose, onSave }: Cus
                   onClick={() => toggleTool(tool)}
                   className={`px-2 py-0.5 rounded-md text-[11px] transition-colors ${
                     selected
-                      ? 'bg-blue-600 text-white'
+                      ? 'bg-[var(--brand-solid)] text-white'
                       : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
                   }`}
                 >
@@ -149,7 +149,7 @@ export default function CustomAgentEditor({ open, config, onClose, onSave }: Cus
           </button>
           <button
             onClick={() => onSave(draft)}
-            className="px-4 py-1.5 rounded-lg text-xs text-white bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-500 transition-colors"
+            className="px-4 py-1.5 rounded-lg text-xs text-white bg-[var(--brand-solid)] hover:bg-[var(--brand-solid-hover)] transition-colors"
           >
             {t('common.save')}
           </button>

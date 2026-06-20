@@ -10,7 +10,7 @@
  */
 
 import { memo, useEffect, useRef, useState } from 'react';
-import { Brain, ChevronDown } from 'lucide-react';
+import { Think } from '@ant-design/x';
 import { useI18n } from '../../i18n/useI18n';
 import { useLocalStorage } from '../../hooks/useLocalStorage';
 
@@ -52,34 +52,18 @@ function ThinkingBlockInner({ thinking, durationMs, isStreaming }: ThinkingBlock
   const seconds = (displayMs / 1000).toFixed(1);
 
   return (
-    <div className="rounded-lg border border-purple-100 bg-purple-50/50 dark:border-purple-900/50 dark:bg-purple-950/30 overflow-hidden">
-      {/* 折叠头部 */}
-      <button
-        onClick={() => setExpanded(prev => !prev)}
-        className="flex items-center gap-2 w-full px-3 py-2 text-left hover:bg-purple-50 dark:hover:bg-purple-900/30 transition-colors"
-      >
-        <Brain size={14} className="shrink-0 text-purple-400" />
-        <span className="text-xs font-medium text-purple-600 dark:text-purple-300">{t('agent.thinking.deepThinking')}</span>
-        <span className="text-xs text-purple-400">· {seconds}s</span>
-        <ChevronDown
-          size={12}
-          className={`shrink-0 text-purple-400 transition-transform ${expanded ? '' : '-rotate-90'}`}
-        />
-      </button>
-
-      {/* 展开内容 */}
-      {expanded ? (
-        <div className="border-t border-purple-100 dark:border-purple-900/50 px-3 py-2 max-h-[400px] overflow-auto">
-          <p className="text-xs text-purple-800/70 dark:text-purple-300/70 leading-relaxed whitespace-pre-wrap break-words">
-            {thinking}
-          </p>
-        </div>
-      ) : (
-        isStreaming && (
-          <span className="inline-block w-2 h-3.5 ml-0.5 bg-purple-400 animate-pulse rounded-sm" />
-        )
-      )}
-    </div>
+    <Think
+      loading={isStreaming}
+      expanded={expanded}
+      onExpand={setExpanded}
+      title={`${t('agent.thinking.deepThinking')} · ${seconds}s`}
+      blink={isStreaming}
+      styles={{ content: { maxHeight: 400, overflow: 'auto', fontSize: 13 } }}
+    >
+      <p className="whitespace-pre-wrap break-words leading-relaxed m-0">
+        {thinking}
+      </p>
+    </Think>
   );
 }
 

@@ -24,7 +24,7 @@ export default function AgentDetail({ scope, scopeTitle, onBack }: AgentDetailPr
       <div className="flex items-center gap-1.5">
         <button
           onClick={onBack}
-          className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+          className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 hover:text-[var(--brand-primary)] transition-colors"
         >
           <ChevronLeft size={14} />
           {t('settings.agents.backToList')}

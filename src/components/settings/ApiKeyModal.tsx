@@ -67,7 +67,7 @@ export default function ApiKeyModal({ open, onClose, onSave }: ApiKeyModalProps)
         {/* 说明 */}
         <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
           {t('apiKeyModal.description')}
-          你可以在 <a href="https://platform.claude.com/" target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300">Claude Console</a> 获取 API Key。
+          你可以在 <a href="https://platform.claude.com/" target="_blank" rel="noopener noreferrer" className="text-[var(--brand-primary)] hover:text-[var(--brand-primary-hover)]">Claude Console</a> 获取 API Key。
         </p>
 
         {/* 输入框 */}
@@ -77,7 +77,7 @@ export default function ApiKeyModal({ open, onClose, onSave }: ApiKeyModalProps)
             value={apiKey}
             onChange={e => { setApiKey(e.target.value); setError(''); }}
             placeholder={t('apiKeyModal.placeholder')}
-            className="w-full rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-[#2a2a2a] px-3 py-2 pr-10 text-sm text-[#141414] dark:text-gray-100 placeholder-gray-300 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+            className="w-full rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-[#2a2a2a] px-3 py-2 pr-10 text-sm text-[#141414] dark:text-gray-100 placeholder-gray-300 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[var(--brand-primary)]/20 focus:border-[var(--brand-primary)]"
             autoFocus
             onKeyDown={e => { if (e.key === 'Enter') handleSave(); }}
           />
@@ -114,7 +114,7 @@ export default function ApiKeyModal({ open, onClose, onSave }: ApiKeyModalProps)
           <button
             onClick={handleSave}
             disabled={verifying || verified || !apiKey.trim()}
-            className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs text-white bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs text-white bg-[var(--brand-solid)] hover:bg-[var(--brand-solid-hover)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             {verifying ? (
               <>

@@ -90,7 +90,7 @@ export default function GeneralPanel({ workspaces }: { workspaces: Workspace[] }
                 onClick={() => setLanguage(lang as Language)}
                 className={`rounded-md px-3 py-1 text-xs transition-colors ${
                   language === lang
-                    ? 'bg-blue-600 text-white'
+                    ? 'bg-[var(--brand-solid)] text-white'
                     : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
                 }`}
               >
@@ -116,7 +116,7 @@ export default function GeneralPanel({ workspaces }: { workspaces: Workspace[] }
                   onClick={() => setTheme(opt.value)}
                   className={`flex items-center gap-1 rounded-md px-3 py-1 text-xs transition-colors ${
                     active
-                      ? 'bg-blue-600 text-white'
+                      ? 'bg-[var(--brand-solid)] text-white'
                       : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
                   }`}
                 >
@@ -175,7 +175,7 @@ export default function GeneralPanel({ workspaces }: { workspaces: Workspace[] }
                 setTestStatus(result.ok ? 'success' : 'failed');
                 setTimeout(() => setTestStatus('idle'), 5000);
               }}
-              className="rounded-lg px-3 py-1 text-xs text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors disabled:opacity-50"
+              className="rounded-lg px-3 py-1 text-xs text-[var(--brand-primary)] hover:bg-[var(--brand-soft-bg)] transition-colors disabled:opacity-50"
             >
               {testStatus === 'testing'
                 ? (language === 'zh' ? '发送中…' : 'Sending…')
@@ -192,7 +192,7 @@ export default function GeneralPanel({ workspaces }: { workspaces: Workspace[] }
           </p>
           <button
             onClick={() => openNotificationSettings()}
-            className="text-[11px] text-blue-500 dark:text-blue-400 hover:underline"
+            className="text-[11px] text-[var(--brand-primary)] hover:underline"
           >
             {language === 'zh' ? '› 打开系统通知设置' : '› Open System Notification Settings'}
           </button>

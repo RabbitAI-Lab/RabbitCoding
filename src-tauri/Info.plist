@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- 麦克风使用说明（macOS 隐私权限弹窗中展示） -->
+    <key>NSMicrophoneUsageDescription</key>
+    <string>RabbitCoding 需要使用麦克风进行语音识别输入</string>
+</dict>
+</plist>

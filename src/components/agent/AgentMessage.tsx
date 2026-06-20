@@ -36,16 +36,22 @@ interface AgentMessageProps {
   rabbitId?: string;
   /** Spec 确认后启动编码查询 */
   onSpecRun?: (rabbitId: string) => void;
+  /** 点击 user 消息进入 inline 编辑 */
+  onEditUserMessage?: () => void;
 }
 
-function AgentMessageItemInner({ message, isStreaming, toolResult, rabbitId, onSpecRun }: AgentMessageProps) {
+function AgentMessageItemInner({ message, isStreaming, toolResult, rabbitId, onSpecRun, onEditUserMessage }: AgentMessageProps) {
   const [specRunClicked, setSpecRunClicked] = useState(false);
   const { t } = useI18n();
   switch (message.type) {
     case 'user': {
       const userMsg = message as UserMessage;
+      const editable = !!onEditUserMessage;
       return (
-        <div className="flex items-center rounded-lg bg-[#f3f3f3] dark:bg-gray-800 px-3 min-h-[33px] text-[13px] text-[#141414] dark:text-gray-100 whitespace-pre-wrap break-words">
+        <div
+          className={`flex items-center gap-1 rounded-lg bg-[#f3f3f3] dark:bg-gray-800 px-3 min-h-[33px] text-[13px] text-[#141414] dark:text-gray-100 whitespace-pre-wrap break-words ${editable ? 'cursor-pointer hover:bg-[#e8e8e8] dark:hover:bg-gray-700 transition-colors' : ''}`}
+          onClick={editable ? onEditUserMessage : undefined}
+        >
           {userMsg.text}
         </div>
       );

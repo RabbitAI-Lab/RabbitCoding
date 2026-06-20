@@ -268,7 +268,7 @@ export default function McpEditModal({ open, config, onClose, onSave }: McpEditM
 
   /** 输入框样式 */
   const inputClass =
-    'w-full rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-[#2a2a2a] px-3 py-2 text-sm text-[#141414] dark:text-gray-100 placeholder-gray-300 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors';
+    'w-full rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-[#2a2a2a] px-3 py-2 text-sm text-[#141414] dark:text-gray-100 placeholder-gray-300 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[var(--brand-primary)]/20 focus:border-[var(--brand-primary)] transition-colors';
 
   /** 标签样式 */
   const labelClass = 'block text-xs font-medium text-[#333333] dark:text-gray-200 mb-1';
@@ -287,7 +287,7 @@ export default function McpEditModal({ open, config, onClose, onSave }: McpEditM
             onClick={() => { setMode('form'); setError(''); }}
             className={`px-3 py-1.5 text-xs font-medium transition-colors border-b-2 -mb-px ${
               mode === 'form'
-                ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+                ? 'border-[var(--brand-primary)] text-[var(--brand-primary)]'
                 : 'border-transparent text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
             }`}
           >
@@ -297,7 +297,7 @@ export default function McpEditModal({ open, config, onClose, onSave }: McpEditM
             onClick={() => { setMode('json'); setError(''); }}
             className={`px-3 py-1.5 text-xs font-medium transition-colors border-b-2 -mb-px ${
               mode === 'json'
-                ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+                ? 'border-[var(--brand-primary)] text-[var(--brand-primary)]'
                 : 'border-transparent text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
             }`}
           >
@@ -339,7 +339,7 @@ export default function McpEditModal({ open, config, onClose, onSave }: McpEditM
               <button
                 onClick={handleJsonImport}
                 disabled={!jsonText.trim()}
-                className="px-4 py-1.5 rounded-lg text-xs text-white bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                className="px-4 py-1.5 rounded-lg text-xs text-white bg-[var(--brand-solid)] hover:bg-[var(--brand-solid-hover)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
                 {t('settings.mcp.json.import')}
               </button>
@@ -360,7 +360,7 @@ export default function McpEditModal({ open, config, onClose, onSave }: McpEditM
                 onClick={() => updateField('type', type)}
                 className={`px-2.5 py-1 rounded-md text-xs transition-colors ${
                   form.type === type
-                    ? 'bg-blue-600 text-white'
+                    ? 'bg-[var(--brand-solid)] text-white'
                     : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'
                 }`}
               >
@@ -456,7 +456,7 @@ export default function McpEditModal({ open, config, onClose, onSave }: McpEditM
                 ))}
                 <button
                   onClick={addEnvVar}
-                  className="flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors"
+                  className="flex items-center gap-1 text-xs text-[var(--brand-primary)] hover:text-[var(--brand-primary-hover)] transition-colors"
                 >
                   <Plus size={14} />
                   {t('settings.mcp.field.addEnvVar')}
@@ -513,7 +513,7 @@ export default function McpEditModal({ open, config, onClose, onSave }: McpEditM
                 ))}
                 <button
                   onClick={addHeader}
-                  className="flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors"
+                  className="flex items-center gap-1 text-xs text-[var(--brand-primary)] hover:text-[var(--brand-primary-hover)] transition-colors"
                 >
                   <Plus size={14} />
                   {t('settings.mcp.field.addHeader')}
@@ -541,7 +541,7 @@ export default function McpEditModal({ open, config, onClose, onSave }: McpEditM
           </button>
           <button
             onClick={handleSave}
-            className="px-4 py-1.5 rounded-lg text-xs text-white bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-500 transition-colors"
+            className="px-4 py-1.5 rounded-lg text-xs text-white bg-[var(--brand-solid)] hover:bg-[var(--brand-solid-hover)] transition-colors"
           >
             {t('common.save')}
           </button>

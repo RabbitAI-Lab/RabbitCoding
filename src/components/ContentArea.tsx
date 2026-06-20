@@ -1,19 +1,23 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Sender } from '@ant-design/x';
-import { FolderOpen, Code2, PanelRightOpen, PanelRightClose } from 'lucide-react';
+import { FolderOpen, Code2, PanelRightOpen, PanelRightClose, Wand2, Loader2 } from 'lucide-react';
 import type { useWorkspaces } from '../hooks/useWorkspaces';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import { useResizable } from '../hooks/useResizable';
 import { useAgentContext } from '../hooks/useAgentContext';
+import { useOptimizePrompt } from '../hooks/useOptimizePrompt';
 import AddRepoModal from './common/AddRepoModal';
 import ModelSelector, { type ModelOption } from './common/ModelSelector';
+import Tooltip from './common/Tooltip';
 import ContextIndicator from './common/ContextIndicator';
 import WorkspaceSwitcher from './common/WorkspaceSwitcher';
+import ModeSwitcher, { type WorktreeMode } from './common/ModeSwitcher';
+import VoiceInputButton from './common/VoiceInputButton';
 import RightPanel from './RightPanel';
 import AgentChat from './agent/AgentChat';
 import ApiKeyModal from './settings/ApiKeyModal';
 import Modal from './common/Modal';
-import type { AgentQueryOptions, AgentMessage, UserMessage, ModelConfig, ProxyConfig, Repo, SpecGeneratingMessage, SpecConfirmationMessage, KnowledgeBaseConfig } from '../types';
+import type { AgentQueryOptions, AgentMessage, UserMessage, ModelConfig, ProxyConfig, Repo, SpecGeneratingMessage, SpecConfirmationMessage, KnowledgeBaseConfig, WorktreeInfo, CreateWorktreeInput, CreateWorktreeOutput } from '../types';
 import { invoke } from '@tauri-apps/api/core';
 import { useI18n } from '../i18n/useI18n';
 import { useTheme } from '../hooks/useTheme';
@@ -33,9 +37,9 @@ export default function ContentArea({ store, onOpenSettings }: ContentAreaProps)
   const isDark = resolvedTheme === 'dark';
   const [senderValue, setSenderValue] = useState('');
 
-  // SendButton / LoadingButton 统一配色（兔子主题：胡萝卜橙）
+  // SendButton / LoadingButton 统一配色（兔子主题：胡萝卜橙，接入 CSS 变量）
   const sendBtnBg = senderValue.trim()
-    ? (isDark ? '#F5824C' : '#E8702A')
+    ? 'var(--brand-solid)'
     : (isDark ? '#555555' : '#C4C4C4');
   const sendBtnColor = '#ffffff';
   const [addRepoOpen, setAddRepoOpen] = useState(false);
@@ -45,6 +49,7 @@ export default function ContentArea({ store, onOpenSettings }: ContentAreaProps)
   const [selectedModelConfigId, setSelectedModelConfigId] = useLocalStorage<string>('selected-model-config-id', '');
   const [knowledgeBaseConfigs] = useLocalStorage<Record<string, KnowledgeBaseConfig>>('knowledge-base-configs', {});
   const [specEnabled, setSpecEnabled] = useState(false);
+  const [worktreeEnabled, setWorktreeEnabled] = useState(false);
   const [specTabSignal, setSpecTabSignal] = useState(0);
   const [rightPanelVisible, setRightPanelVisible] = useState(false);
   const [rightPanelMaximized, setRightPanelMaximized] = useState(false);
@@ -77,8 +82,8 @@ export default function ContentArea({ store, onOpenSettings }: ContentAreaProps)
   const [appliedProxyFingerprint, setAppliedProxyFingerprint] = useLocalStorage<string>('proxy-applied-fingerprint', '');
   const { width: rightPanelWidth, isResizing: isPanelResizing, handleProps: panelHandleProps } = useResizable({
     storageKey: 'right-panel-width',
-    defaultWidth: 500,
-    minWidth: 500,
+    defaultWidth: 400,
+    minWidth: 400,
     maxWidthRatio: Infinity,
     reverse: true,
   });
@@ -120,6 +125,38 @@ The workspace Code Wiki is enabled at ${codeWikiDir}. When useful for the task, 
 
   // 从全局 AgentProvider 获取 agent API（listener 在 App 层级，页面切换不丢失）
   const agent = useAgentContext();
+
+  // 提示词优化：直接调用 Provider，不走 sidecar
+  const optimize = useOptimizePrompt();
+
+  /**
+   * 优化提示词：调用当前选中模型的厂商 API，把输入框内容改写为结构化提示词后直接回填
+   */
+  const handleOptimizePrompt = useCallback(async () => {
+    if (!selectedModelConfig) return;
+    const trimmed = senderValue.trim();
+    if (!trimmed) return;
+
+    const result = await optimize.runOptimize({
+      baseUrl: selectedModelConfig.baseUrl,
+      apiKey: selectedModelConfig.apiKey,
+      modelId: selectedModelConfig.modelId,
+      prompt: trimmed,
+    });
+
+    if (result.success && result.optimizedPrompt) {
+      setSenderValue(result.optimizedPrompt);
+    } else {
+      console.error('[ContentArea] Optimize prompt failed:', result.error);
+    }
+  }, [selectedModelConfig, senderValue, optimize]);
+
+  /**
+   * 语音识别文本回填：VoiceInputButton 内部管理前缀累积，这里直接设置 senderValue
+   */
+  const handleVoiceText = useCallback((text: string, _isFinal: boolean) => {
+    setSenderValue(text);
+  }, []);
 
   /**
    * 确保 sidecar 正在运行，然后执行查询
@@ -244,16 +281,20 @@ The workspace Code Wiki is enabled at ${codeWikiDir}. When useful for the task, 
     };
 
     ensureSidecarAndQuery(() => {
+      const cwd = selectedRabbit?.worktree?.basePath || params.cwd;
       if (params.specSessionId) {
         // Resume spec 生成会话：Agent 已有 spec 探索上下文，直接开始编码
         const implPrompt = 'The specification document has been confirmed. Now implement the full specification according to the plan described above. Use the available tools to create and edit files.';
-        agent.resumeQuery(rabbitId, params.specSessionId, implPrompt, params.cwd, options);
+        agent.resumeQuery(rabbitId, params.specSessionId, implPrompt, cwd, options);
       } else {
         // Fallback：spec 会话 ID 缺失时，使用原始 prompt 启动新查询
-        agent.startQuery(rabbitId, params.prompt, params.cwd, options);
+        agent.startQuery(rabbitId, params.prompt, cwd, options);
       }
     });
-  }, [selectedWorkspace, store, agent, ensureSidecarAndQuery]);
+  }, [selectedWorkspace, selectedRabbit, store, agent, ensureSidecarAndQuery]);
+
+  /** 跟踪当前编辑的 checkpoint userMessageId（点击 user 消息后设置，发送时消费） */
+  const editingCheckpointRef = useRef<string | undefined>(undefined);
 
   /**
    * Spec 生成期间的流式消息处理：将 AI 的输出（文本、思考、工具调用）追加到聊天流
@@ -283,7 +324,34 @@ The workspace Code Wiki is enabled at ${codeWikiDir}. When useful for the task, 
     }
   }, [store]);
 
-  const handleSubmit = useCallback((message: string) => {
+  /**
+   * Worktree 模式下解析 cwd：创建 worktree 镜像并返回镜像路径；
+   * 非 worktree 模式返回 workspace 原始路径
+   */
+  const resolveCwd = useCallback(async (): Promise<{ cwd: string; worktree?: WorktreeInfo }> => {
+    if (!worktreeEnabled || !selectedWorkspace?.repos?.length || !selectedWorkspace.path) {
+      return { cwd: selectedWorkspace?.path || '.' };
+    }
+    try {
+      const input: CreateWorktreeInput = {
+        workspacePath: selectedWorkspace.path,
+        repos: selectedWorkspace.repos.map(r => ({ repoId: r.id, repoName: r.name, path: r.path })),
+      };
+      const result = await invoke<CreateWorktreeOutput>('create_worktree', { input });
+      const worktree: WorktreeInfo = {
+        basePath: result.basePath,
+        branch: result.branch,
+        repos: result.repos,
+        createdAt: Date.now(),
+      };
+      return { cwd: result.basePath, worktree };
+    } catch (err) {
+      console.error('[ContentArea] create_worktree failed, falling back to workspace path:', err);
+      return { cwd: selectedWorkspace.path };
+    }
+  }, [worktreeEnabled, selectedWorkspace]);
+
+  const handleSubmit = useCallback(async (message: string) => {
     const trimmed = message.trim();
     if (!selectedWorkspace || !trimmed) return;
 
@@ -295,7 +363,22 @@ The workspace Code Wiki is enabled at ${codeWikiDir}. When useful for the task, 
 
     const agentPrompt = withKnowledgeBaseReference(trimmed);
 
-    if (selectedRabbit && selectedRabbit.sessionId) {
+    // Checkpoint rewind：从 user 消息编辑重发
+    const checkpointUserMessageId = editingCheckpointRef.current;
+    editingCheckpointRef.current = undefined;
+    const isRewindFromCheckpoint = !!checkpointUserMessageId;
+
+    if (isRewindFromCheckpoint && selectedRabbit && selectedRabbit.sessionId) {
+      // 1. 异步恢复文件（fire and forget，rewind_result 通过事件流处理）
+      const rewindCwd = selectedRabbit.worktree?.basePath || selectedWorkspace.path || '';
+      agent.rewindFiles(selectedRabbit.id, selectedRabbit.sessionId, checkpointUserMessageId, rewindCwd).catch(err => {
+        console.error('[ContentArea] rewindFiles failed:', err);
+      });
+      // 2. 截断该消息及之后所有消息，重置 sessionId
+      store.truncateFromMessage(selectedWorkspace.id, selectedRabbit.id, checkpointUserMessageId);
+    }
+
+    if (selectedRabbit && (selectedRabbit.sessionId || isRewindFromCheckpoint)) {
       // Follow-up：恢复已有会话
       const wsId = selectedWorkspace.id;
       const rId = selectedRabbit.id;
@@ -304,7 +387,20 @@ The workspace Code Wiki is enabled at ${codeWikiDir}. When useful for the task, 
       const userMsg: UserMessage = { type: 'user', text: trimmed };
       store.appendRabbitMessage(wsId, rId, userMsg);
       store.updateRabbitAgent(wsId, rId, { status: 'running' });
-      const cwd = selectedWorkspace.path || '.';
+      const specBasePath = selectedWorkspace.path || '.';
+      // Worktree：已有 worktree 则复用 basePath，否则按需创建
+      let cwd = specBasePath;
+      if (selectedRabbit.worktree) {
+        cwd = selectedRabbit.worktree.basePath;
+      } else if (worktreeEnabled && (selectedWorkspace.repos?.length ?? 0) > 0 && selectedWorkspace.path) {
+        try {
+          const { cwd: wtCwd, worktree: wt } = await resolveCwd();
+          cwd = wtCwd;
+          if (wt) store.updateRabbitAgent(wsId, rId, { worktree: wt });
+        } catch (err) {
+          console.error('[ContentArea] create_worktree failed:', err);
+        }
+      }
       ensureSidecarAndQuery(() => {
         const options: AgentQueryOptions = {
           model,
@@ -315,7 +411,7 @@ The workspace Code Wiki is enabled at ${codeWikiDir}. When useful for the task, 
         if (specEnabled) {
           // Spec 优先：仅生成 Spec，编码延迟到用户确认后
           const fileName = generateSpecFileName(trimmed);
-          const specFilePath = `${cwd}/.rabbit/specs/${fileName}`;
+          const specFilePath = `${specBasePath}/.rabbit/specs/${fileName}`;
           // 先显示 Spec 生成中状态
           const generatingMsg: SpecGeneratingMessage = { type: 'spec_generating' };
           store.appendRabbitMessage(wsId, rId, generatingMsg);
@@ -323,7 +419,7 @@ The workspace Code Wiki is enabled at ${codeWikiDir}. When useful for the task, 
             store.updateRabbitAgent(wsId, rId, { status: 'running' });
             agent.resumeQuery(rId, selectedRabbit.sessionId!, agentPrompt, cwd, options);
           };
-          invoke('ensure_rabbit_specs_dir', { path: cwd }).then(() => {
+          invoke('ensure_rabbit_specs_dir', { path: specBasePath }).then(() => {
             generateSpec(agent.startQuery, agentPrompt, specFilePath, cwd, model, (msg: AgentMessage) => {
               handleSpecStream(wsId, rId, msg);
             }).then(({ content: specContent, sessionId: specSessionId, specFilePath: actualSpecFilePath }) => {
@@ -350,7 +446,12 @@ The workspace Code Wiki is enabled at ${codeWikiDir}. When useful for the task, 
             }).catch(() => { fallbackCoding(); });
           }).catch(() => { fallbackCoding(); });
         } else {
-          agent.resumeQuery(rId, selectedRabbit.sessionId!, agentPrompt, cwd, options);
+          if (isRewindFromCheckpoint) {
+            // Checkpoint rewind 后：sessionId 已重置，用 startQuery 启动新会话
+            agent.startQuery(rId, agentPrompt, cwd, options);
+          } else {
+            agent.resumeQuery(rId, selectedRabbit.sessionId!, agentPrompt, cwd, options);
+          }
         }
       });
     } else {
@@ -362,8 +463,20 @@ The workspace Code Wiki is enabled at ${codeWikiDir}. When useful for the task, 
       // 追加用户消息到聊天流
       const userMsg: UserMessage = { type: 'user', text: trimmed };
       store.appendRabbitMessage(wsId, rabbitId, userMsg);
-      store.updateRabbitAgent(wsId, rabbitId, { status: 'running' });
-      const cwd = selectedWorkspace.path || '.';
+      const specBasePath = selectedWorkspace.path || '.';
+      // Worktree：按需创建镜像
+      let cwd = specBasePath;
+      let worktree: WorktreeInfo | undefined;
+      if (worktreeEnabled && (selectedWorkspace.repos?.length ?? 0) > 0 && selectedWorkspace.path) {
+        try {
+          const result = await resolveCwd();
+          cwd = result.cwd;
+          worktree = result.worktree;
+        } catch (err) {
+          console.error('[ContentArea] create_worktree failed:', err);
+        }
+      }
+      store.updateRabbitAgent(wsId, rabbitId, { status: 'running', worktree });
       ensureSidecarAndQuery(() => {
         const options: AgentQueryOptions = {
           model,
@@ -374,7 +487,7 @@ The workspace Code Wiki is enabled at ${codeWikiDir}. When useful for the task, 
         if (specEnabled) {
           // Spec 优先：仅生成 Spec，编码延迟到用户确认后
           const fileName = generateSpecFileName(trimmed);
-          const specFilePath = `${cwd}/.rabbit/specs/${fileName}`;
+          const specFilePath = `${specBasePath}/.rabbit/specs/${fileName}`;
           // 先显示 Spec 生成中状态
           const generatingMsg: SpecGeneratingMessage = { type: 'spec_generating' };
           store.appendRabbitMessage(wsId, rabbitId, generatingMsg);
@@ -382,7 +495,7 @@ The workspace Code Wiki is enabled at ${codeWikiDir}. When useful for the task, 
             store.updateRabbitAgent(wsId, rabbitId, { status: 'running' });
             agent.startQuery(rabbitId, agentPrompt, cwd, options);
           };
-          invoke('ensure_rabbit_specs_dir', { path: cwd }).then(() => {
+          invoke('ensure_rabbit_specs_dir', { path: specBasePath }).then(() => {
             generateSpec(agent.startQuery, agentPrompt, specFilePath, cwd, model, (msg: AgentMessage) => {
               handleSpecStream(wsId, rabbitId, msg);
             }).then(({ content: specContent, sessionId: specSessionId, specFilePath: actualSpecFilePath }) => {
@@ -414,7 +527,13 @@ The workspace Code Wiki is enabled at ${codeWikiDir}. When useful for the task, 
       });
     }
     setSenderValue('');
-  }, [selectedWorkspace, selectedRabbit, effectiveModel, store, agent, ensureSidecarAndQuery, modelOptions, specEnabled, withKnowledgeBaseReference]);
+  }, [selectedWorkspace, selectedRabbit, effectiveModel, store, agent, ensureSidecarAndQuery, modelOptions, specEnabled, worktreeEnabled, withKnowledgeBaseReference, resolveCwd]);
+
+  /** 点击 user 消息 inline 编辑后发送 → 直接触发 rewind + 重发 */
+  const handleEditUserMessage = useCallback((text: string, userMessageId?: string) => {
+    editingCheckpointRef.current = userMessageId;
+    handleSubmit(text);
+  }, [handleSubmit]);
 
   const handleChange = useCallback((value: string) => {
     setSenderValue(value);
@@ -434,7 +553,7 @@ The workspace Code Wiki is enabled at ${codeWikiDir}. When useful for the task, 
   /** 手动触发会话压缩 */
   const handleCompact = useCallback(() => {
     if (!selectedRabbit?.sessionId || !selectedWorkspace) return;
-    const cwd = selectedWorkspace.path || '.';
+    const cwd = selectedRabbit?.worktree?.basePath || selectedWorkspace.path || '.';
     const options: AgentQueryOptions = {
       model: effectiveModel,
       allowedTools: ['Read', 'Edit', 'Bash', 'Glob', 'Grep', 'Write', 'TodoWrite', 'TaskCreate', 'TaskUpdate', 'TaskGet', 'TaskList'],
@@ -445,6 +564,94 @@ The workspace Code Wiki is enabled at ${codeWikiDir}. When useful for the task, 
       agent.compactQuery(selectedRabbit.id, selectedRabbit.sessionId!, cwd, options);
     });
   }, [selectedRabbit, selectedWorkspace, effectiveModel, agent, ensureSidecarAndQuery]);
+
+  /** 共享的 Sender footer 渲染函数：底部 Sender 和 inline 编辑 Sender 都复用此函数 */
+  const renderSenderFooter = useCallback((
+    ctx: { value: string; components: { SendButton: React.ComponentType<any>; LoadingButton: React.ComponentType<any> }; showUsage?: boolean }
+  ): React.ReactNode => {
+    const { value: footerValue, components: { SendButton, LoadingButton }, showUsage = true } = ctx;
+    const footerSendBtnBg = footerValue.trim()
+      ? 'var(--brand-solid)'
+      : (isDark ? '#555555' : '#C4C4C4');
+    return (
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-0">
+          <ModelSelector value={selectedModelConfigId} options={modelOptions} onChange={setSelectedModelConfigId} onConfigure={() => onOpenSettings?.('models')} />
+          <div className="h-3 w-px bg-gray-200 dark:bg-gray-600 mx-1.5" />
+          <Sender.Switch
+            value={specEnabled}
+            onChange={setSpecEnabled}
+            unCheckedChildren={null}
+            checkedChildren="Spec"
+            icon={<Code2 size={11} />}
+            styles={{
+              root: { fontSize: 11, lineHeight: 1, transition: 'none' },
+              content: {
+                fontSize: 11, lineHeight: 1,
+                padding: specEnabled ? '0 4px 0 2px' : '0',
+                height: 22, minHeight: 22,
+                border: 'none', background: 'transparent', boxShadow: 'none', transition: 'none',
+              },
+              icon: { fontSize: 11, marginRight: -4, transition: 'none' },
+              title: { fontSize: 11, transition: 'none' },
+            }}
+          />
+        </div>
+        <div className="flex items-center gap-1.5">
+          {showUsage && (
+            <ContextIndicator
+              tokenUsage={selectedRabbit?.currentUsage}
+              maxContextTokens={selectedModelConfig?.maxContextTokens}
+              compactionPhase={selectedRabbit?.compactionPhase}
+              status={selectedRabbit?.status}
+              onCompact={handleCompact}
+            />
+          )}
+          <Tooltip
+            content={
+              !footerValue.trim()
+                ? t('contentArea.optimizePromptEmpty')
+                : !selectedModelConfig || !selectedModelConfig.apiKey
+                  ? t('contentArea.optimizePromptNoModel')
+                  : t('contentArea.optimizePrompt')
+            }
+          >
+            <button
+              type="button"
+              onClick={handleOptimizePrompt}
+              disabled={!footerValue.trim() || !selectedModelConfig || !selectedModelConfig.apiKey || optimize.state.status === 'loading'}
+              className="flex items-center justify-center text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              style={{ width: 22, height: 22, padding: 0, border: 'none', background: 'transparent', cursor: 'pointer' }}
+            >
+              {optimize.state.status === 'loading'
+                ? <Loader2 size={14} className="animate-spin" />
+                : <Wand2 size={14} />}
+            </button>
+          </Tooltip>
+          <VoiceInputButton onText={handleVoiceText} currentText={footerValue} />
+          {selectedRabbit?.status === 'running' ? (
+            <LoadingButton style={{ width: 20, height: 20, minWidth: 20, fontSize: 12, padding: 0, backgroundColor: footerSendBtnBg, color: sendBtnColor, border: 'none' }} />
+          ) : (
+            <SendButton style={{ width: 20, height: 20, minWidth: 20, fontSize: 12, padding: 0, backgroundColor: footerSendBtnBg, color: sendBtnColor, border: 'none' }} />
+          )}
+        </div>
+      </div>
+    );
+  }, [selectedModelConfigId, modelOptions, specEnabled, selectedRabbit, selectedModelConfig, optimize.state.status, isDark, sendBtnColor, handleCompact, handleOptimizePrompt, handleVoiceText, onOpenSettings, t]);
+
+  /** 清理 worktree 镜像 */
+  const handleClearWorktree = useCallback(async () => {
+    if (!selectedRabbit?.worktree || !selectedWorkspace?.path) return;
+    const wt = selectedRabbit.worktree;
+    try {
+      await invoke('remove_worktree', {
+        input: { workspacePath: selectedWorkspace.path, branch: wt.branch, force: true },
+      });
+    } catch (err) {
+      console.error('[ContentArea] remove_worktree failed:', err);
+    }
+    store.clearWorktree(selectedWorkspace.id, selectedRabbit.id);
+  }, [selectedRabbit, selectedWorkspace, store]);
 
   if (!selectedWorkspace) {
     return (
@@ -494,7 +701,7 @@ The workspace Code Wiki is enabled at ${codeWikiDir}. When useful for the task, 
             <>
               {/* Agent 对话流 */}
               <div className="flex-1 overflow-hidden">
-                <AgentChat rabbit={selectedRabbit} onSpecRun={handleSpecRun} />
+                <AgentChat rabbit={selectedRabbit} onSpecRun={handleSpecRun} onEditUserMessage={handleEditUserMessage} renderSenderFooter={renderSenderFooter} />
               </div>
 
               {/* 底部输入框（follow-up） */}
@@ -517,80 +724,48 @@ The workspace Code Wiki is enabled at ${codeWikiDir}. When useful for the task, 
                     }
                   }}
                   placeholder={t('contentArea.followUpPlaceholder')}
-                  autoSize={{ minRows: 1, maxRows: 4 }}
+                  autoSize={{ minRows: 3, maxRows: 10 }}
                   suffix={false}
-                  styles={{ footer: { paddingBottom: 6 } }}
-                  footer={(_, { components: { SendButton, LoadingButton } }) => (
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-0">
-                        <ModelSelector value={selectedModelConfigId} options={modelOptions} onChange={setSelectedModelConfigId} onConfigure={() => onOpenSettings?.('models')} />
-                        <div className="h-3 w-px bg-gray-200 dark:bg-gray-600 mx-1.5" />
-                        <Sender.Switch
-                          value={specEnabled}
-                          onChange={setSpecEnabled}
-                          unCheckedChildren={null}
-                          checkedChildren="Spec"
-                          icon={<Code2 size={11} />}
-                          styles={{
-                            root: { fontSize: 11, lineHeight: 1, transition: 'none' },
-                            content: {
-                              fontSize: 11,
-                              lineHeight: 1,
-                              padding: specEnabled ? '0 4px 0 2px' : '0',
-                              height: 22,
-                              minHeight: 22,
-                              border: 'none',
-                              background: 'transparent',
-                              boxShadow: 'none',
-                              transition: 'none',
-                            },
-                            icon: { fontSize: 11, marginRight: -4, transition: 'none' },
-                            title: { fontSize: 11, transition: 'none' },
-                          }}
-                        />
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <ContextIndicator
-                          tokenUsage={selectedRabbit?.currentUsage}
-                          maxContextTokens={selectedModelConfig?.maxContextTokens}
-                          compactionPhase={selectedRabbit?.compactionPhase}
-                          status={selectedRabbit?.status}
-                          onCompact={handleCompact}
-                        />
-                        {selectedRabbit?.status === 'running' ? (
-                          <LoadingButton style={{ width: 22, height: 22, minWidth: 22, fontSize: 12, padding: 0, backgroundColor: sendBtnBg, color: sendBtnColor, border: 'none' }} />
-                        ) : (
-                          <SendButton style={{ width: 22, height: 22, minWidth: 22, fontSize: 12, padding: 0, backgroundColor: sendBtnBg, color: sendBtnColor, border: 'none' }} />
-                        )}
-                      </div>
-                    </div>
-                  )}
+                  styles={{ content: { paddingTop: 2 }, footer: { paddingBottom: 6 } }}
+                  footer={(_, { components: { SendButton, LoadingButton } }) =>
+                    renderSenderFooter({ value: senderValue, components: { SendButton, LoadingButton } })
+                  }
                 />
               </div>
             </>
           ) : (
             // 未选中 Rabbit 时：显示欢迎页 + Sender
-            <div className="flex-1 flex flex-col items-center justify-center px-6 pt-4 overflow-auto">
-              <div className="w-full max-w-2xl flex flex-col items-center gap-3">
-                <p className="text-lg font-medium text-[#141414] dark:text-gray-100 tracking-widest">
-                  Hop On, Ship Out
-                </p>
-                <WorkspaceSwitcher
-                  workspaces={store.workspaces}
-                  selectedWorkspaceId={store.selectedWorkspaceId!}
-                  onSelect={(id) => store.selectWorkspace(id)}
-                />
-              </div>
-              <div className="w-full max-w-2xl mt-3">
+            <div className="flex-1 flex items-center justify-center px-6 overflow-auto">
+              <div className="w-full max-w-2xl relative">
+                {/* 标题：absolute 脱离文档流，bottom-full 紧贴 Sender 容器顶部上方，mb-3 留间距，不参与居中计算 */}
+                <div className="absolute bottom-full left-0 right-0 flex flex-col items-center gap-3 mb-3">
+                  <p className="text-2xl font-medium text-[#141414] dark:text-gray-100 tracking-widest">
+                    Hop On, Ship Out
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <WorkspaceSwitcher
+                      workspaces={store.workspaces}
+                      selectedWorkspaceId={store.selectedWorkspaceId!}
+                      onSelect={(id) => store.selectWorkspace(id)}
+                    />
+                    <div style={{ marginLeft: -15 }}>
+                      <ModeSwitcher
+                        mode={worktreeEnabled ? 'worktree' : 'local'}
+                        onChange={(mode: WorktreeMode) => setWorktreeEnabled(mode === 'worktree')}
+                        hasRepos={(selectedWorkspace?.repos?.length ?? 0) > 0}
+                      />
+                    </div>
+                  </div>
+                </div>
                 <Sender
                   value={senderValue}
                   onChange={handleChange}
                   onSubmit={handleSubmit}
                   onKeyDown={handleSenderKeyDown}
                   placeholder={t('contentArea.inputPlaceholder')}
-                  autoSize={{ minRows: 1, maxRows: 4 }}
+                  autoSize={{ minRows: 3, maxRows: 10 }}
                   suffix={false}
-                  styles={{ footer: { paddingBottom: 6 } }}
+                  styles={{ content: { paddingTop: 2 }, footer: { paddingBottom: 6 } }}
                   footer={(_, { components: { SendButton } }) => (
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-0">
@@ -620,7 +795,31 @@ The workspace Code Wiki is enabled at ${codeWikiDir}. When useful for the task, 
                           }}
                         />
                       </div>
-                      <SendButton style={{ width: 22, height: 22, minWidth: 22, fontSize: 12, padding: 0, backgroundColor: sendBtnBg, color: sendBtnColor, border: 'none' }} />
+                      <div className="flex items-center gap-1.5">
+                        <VoiceInputButton onText={handleVoiceText} currentText={senderValue} />
+                        <Tooltip
+                          content={
+                            !senderValue.trim()
+                              ? t('contentArea.optimizePromptEmpty')
+                              : !selectedModelConfig || !selectedModelConfig.apiKey
+                                ? t('contentArea.optimizePromptNoModel')
+                                : t('contentArea.optimizePrompt')
+                          }
+                        >
+                          <button
+                            type="button"
+                            onClick={handleOptimizePrompt}
+                            disabled={!senderValue.trim() || !selectedModelConfig || !selectedModelConfig.apiKey || optimize.state.status === 'loading'}
+                            className="flex items-center justify-center text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                            style={{ width: 22, height: 22, padding: 0, border: 'none', background: 'transparent', cursor: 'pointer' }}
+                          >
+                            {optimize.state.status === 'loading'
+                              ? <Loader2 size={14} className="animate-spin" />
+                              : <Wand2 size={14} />}
+                          </button>
+                        </Tooltip>
+                        <SendButton style={{ width: 20, height: 20, minWidth: 20, fontSize: 12, padding: 0, backgroundColor: sendBtnBg, color: sendBtnColor, border: 'none' }} />
+                      </div>
                     </div>
                   )}
                 />
@@ -645,7 +844,7 @@ The workspace Code Wiki is enabled at ${codeWikiDir}. When useful for the task, 
             <div
               style={{ width: rightPanelMaximized ? '100%' : rightPanelWidth }}
               className={`shrink-0 overflow-auto bg-white dark:bg-[#1e1e1e] border-l border-gray-200 dark:border-gray-700 ${
-                rightPanelMaximized ? '' : 'min-w-[500px]'
+                rightPanelMaximized ? '' : 'min-w-[400px]'
               }`}
             >
               <RightPanel
@@ -658,6 +857,7 @@ The workspace Code Wiki is enabled at ${codeWikiDir}. When useful for the task, 
                 onAddRepo={() => { setEditingRepo(null); setAddRepoOpen(true); }}
                 onEditRepo={(repo) => { setEditingRepo(repo); setAddRepoOpen(true); }}
                 onDeleteRepo={(repoId) => store.deleteRepo(selectedWorkspace.id, repoId)}
+                onClearWorktree={handleClearWorktree}
               />
             </div>
           </>

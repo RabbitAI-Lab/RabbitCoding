@@ -2,29 +2,45 @@
 schema_version: 1
 locale: zh-CN
 branch: main
-exported_at: "2026-06-18T20:34:19Z"
+exported_at: "2026-06-20T05:25:19Z"
 modules:
     "":
-        dir_name: Rabbit Coding 桌面应用编排层
-        title: Rabbit Coding 桌面应用编排层
-        scope:
-            - README.md
-            - .gitignore
-            - .qoderignore
-            - package.json
-            - pnpm-lock.yaml
-            - pnpm-workspace.yaml
-            - tsconfig.json
-            - tsconfig.node.json
-            - vite.config.ts
-            - index.html
+        dir_name: RabbitCoding AI 智能体桌面应用
+        title: RabbitCoding AI 智能体桌面应用
+        scope: []
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    decisions:
+        dir_name: 决策记录
+        title: 决策记录
+        scope: []
+        source_files: []
+        children:
+            - decisions/dc1bf71b0528_6cbc3bc6c60c
+            - decisions/dc1bf71b0528_2855ad5aec29
+        depends_on: []
+        related_to: []
+    decisions/dc1bf71b0528_6cbc3bc6c60c:
+        dir_name: 移除对话统计行并改用逐轮 Markdown 复制
+        title: 移除对话统计行并改用逐轮 Markdown 复制
+        scope: []
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    decisions/dc1bf71b0528_2855ad5aec29:
+        dir_name: 统一使用 Claude CLI 进行插件安装与配置隔离
+        title: 统一使用 Claude CLI 进行插件安装与配置隔离
+        scope: []
         source_files: []
         children: []
         depends_on: []
         related_to: []
     frontend:
-        dir_name: AI Agent 前端交互与状态管理
-        title: AI Agent 前端交互与状态管理
+        dir_name: AI 智能体交互与多工作区管理前端
+        title: AI 智能体交互与多工作区管理前端
         scope:
             - src/
         source_files: []
@@ -34,8 +50,8 @@ modules:
             - path: sidecar
             - path: tauri_backend
     sidecar:
-        dir_name: Claude Agent Sidecar 通信桥接
-        title: Claude Agent Sidecar 通信桥接
+        dir_name: Claude Agent SDK 桥接服务
+        title: Claude Agent SDK 桥接服务
         scope:
             - sidecar/
         source_files: []
@@ -45,8 +61,8 @@ modules:
             - path: frontend
             - path: tauri_backend
     tauri_backend:
-        dir_name: Rabbit Coding 桌面应用后端核心
-        title: Rabbit Coding 桌面应用后端核心
+        dir_name: Tauri 应用后端核心
+        title: Tauri 应用后端核心
         scope:
             - src-tauri/
         source_files: []

@@ -31,9 +31,10 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 tokio = { version = "1", features = ["rt-multi-thread", "rt", "sync", "time"] }
 xcap = "0.9"
 sysinfo = "0.32"
-reqwest = { version = "0.12", features = ["json"] }
+reqwest = { version = "0.12", features = ["json", "blocking"] }
 regex = "1"
 base64 = "0.22"
 image = { version = "0.25", default-features = false, features = ["jpeg"] }
 tauri-plugin-notification = "2.3.3"
 tauri-plugin-deep-link = "2"
+sherpa-onnx = { version = "1.13", default-features = false, features = ["static"] }

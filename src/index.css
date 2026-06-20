@@ -27,6 +27,24 @@
   display: none !important;
 }
 
+/* 胡萝卜橙主题色（兔子主题，主色单一来源） */
+:root {
+  --brand-primary: #E07B00;        /* 文字/链接主色 */
+  --brand-primary-hover: #C46A00;  /* 文字 hover */
+  --brand-solid: #E8702A;          /* 实心按钮底色 */
+  --brand-solid-hover: #D46020;    /* 实心按钮 hover */
+  --brand-soft-bg: rgba(224, 123, 0, 0.10);    /* 选中态浅底 */
+  --brand-soft-border: rgba(224, 123, 0, 0.30); /* 次级按钮描边 */
+}
+.dark {
+  --brand-primary: #F5824C;
+  --brand-primary-hover: #E87238;
+  --brand-solid: #F5824C;
+  --brand-solid-hover: #E87238;
+  --brand-soft-bg: rgba(245, 130, 76, 0.15);
+  --brand-soft-border: rgba(245, 130, 76, 0.30);
+}
+
 /* XMarkdown 主题：文字颜色 + 缩小字号（覆盖 light/dark.css 默认值） */
 .x-markdown-light {
   --text-color: #141414;
@@ -48,10 +66,7 @@
 
 /* 登录按钮：胡萝卜橙主题色（与 SendButton 统一） */
 .login-orange-btn:not(:disabled):hover {
-  background-color: #D46020 !important;
-}
-.dark .login-orange-btn:not(:disabled):hover {
-  background-color: #E87238 !important;
+  background-color: var(--brand-solid-hover) !important;
 }
 
 @keyframes pet-rabbit-breathe {
@@ -358,4 +373,33 @@ html.pet-window-document #root {
   .pet-task-marquee {
     animation: none !important;
   }
+}
+
+/* 自定义细滚动条（3px）—— 知识库等区域使用 */
+.thin-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(156, 163, 175, 0.45) transparent;
+}
+.thin-scrollbar::-webkit-scrollbar {
+  width: 3px;
+  height: 3px;
+}
+.thin-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.thin-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgba(156, 163, 175, 0.4);
+  border-radius: 3px;
+}
+.thin-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(156, 163, 175, 0.6);
+}
+.dark .thin-scrollbar {
+  scrollbar-color: rgba(148, 163, 184, 0.4) transparent;
+}
+.dark .thin-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgba(148, 163, 184, 0.35);
+}
+.dark .thin-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(148, 163, 184, 0.55);
 }

@@ -5,6 +5,48 @@ export interface Repo {
   createdAt: number;
 }
 
+/** Worktree 中单个 repo 的镜像信息 */
+export interface WorktreeRepoEntry {
+  repoId: string;
+  repoName: string;
+  originalPath: string;
+  worktreePath: string;
+  branch: string;
+  baseBranch: string;
+  /** 跳过原因（非 git 仓库、创建失败等） */
+  skipReason?: string;
+}
+
+/** Worktree 镜像信息 */
+export interface WorktreeInfo {
+  /** 镜像根目录路径（{workspace}/.rabbit/worktrees/{branch}/） */
+  basePath: string;
+  branch: string;
+  repos: WorktreeRepoEntry[];
+  createdAt: number;
+}
+
+/** create_worktree 命令的输入 */
+export interface CreateWorktreeInput {
+  workspacePath: string;
+  repos: { repoId: string; repoName: string; path: string }[];
+  branch?: string;
+}
+
+/** create_worktree 命令的输出 */
+export interface CreateWorktreeOutput {
+  basePath: string;
+  branch: string;
+  repos: WorktreeRepoEntry[];
+}
+
+/** remove_worktree 命令的输入 */
+export interface RemoveWorktreeInput {
+  workspacePath: string;
+  branch: string;
+  force: boolean;
+}
+
 export interface Rabbit {
   id: string;
   title: string;
@@ -29,6 +71,9 @@ export interface Rabbit {
   // ---- Spec 文档 ----
   /** 本会话通过 WriteSpec 工具写入的 Spec 文档路径列表（可能有多个） */
   specFilePaths?: string[];
+  // ---- Worktree 隔离 ----
+  /** 本会话使用的 worktree 镜像信息（提交时自动创建，follow-up 复用） */
+  worktree?: WorktreeInfo;
 }
 
 export interface Workspace {
@@ -99,12 +144,16 @@ export type AgentMessage =
   | CompactionStatusMessage
   | CompactionResultMessage
   | UsageUpdateMessage
-  | AskUserQuestionMessage;
+  | AskUserQuestionMessage
+  | RewindResultMessage
+  | UserMessageUuidMessage;
 
 /** 用户发送的消息 */
 export interface UserMessage {
   type: 'user';
   text: string;
+  /** SDK 分配的 user message uuid（用于 rewindFiles checkpoint 回滚） */
+  userMessageId?: string;
 }
 
 /** 系统初始化消息 */
@@ -219,6 +268,26 @@ export interface SpecWrittenMessage {
   type: 'spec_written';
   specContent: string;
   specFilePath: string;
+}
+
+/** 文件回滚结果消息（来自 sidecar） */
+export interface RewindResultMessage {
+  type: 'rewind_result';
+  success: boolean;
+  error?: string;
+  filesChanged?: string[];
+  insertions?: number;
+  deletions?: number;
+  dryRun?: boolean;
+  userMessageId?: string;
+  /** 前端状态：是否已处理 */
+  handled?: boolean;
+}
+
+/** SDK 分配的 user message uuid（来自 sidecar，用于 rewindFiles checkpoint） */
+export interface UserMessageUuidMessage {
+  type: 'user_message_uuid';
+  sdkUuid: string;
 }
 
 /** 会话压缩状态消息 */
@@ -353,6 +422,18 @@ export interface ModelTestResult {
   latencyMs: number | null;
   /** 服务端回显的 model 字段，用于确认 modelId 被接受 */
   modelEcho: string | null;
+  /** 友好错误描述（失败时填充） */
+  error: string | null;
+}
+
+/** 提示词优化结果（由 optimize_prompt 命令返回，字段对齐 Rust camelCase） */
+export interface OptimizePromptResult {
+  /** 是否优化成功 */
+  success: boolean;
+  /** 优化后的提示词（成功时填充） */
+  optimizedPrompt: string | null;
+  /** 请求耗时（毫秒） */
+  latencyMs: number | null;
   /** 友好错误描述（失败时填充） */
   error: string | null;
 }

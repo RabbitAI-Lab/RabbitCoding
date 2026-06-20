@@ -11,6 +11,7 @@ import {
   FlaskConical,
   Wrench,
   MessageCircleQuestion,
+  Mic,
   type LucideIcon,
 } from 'lucide-react';
 import { useResizable } from '../../hooks/useResizable';
@@ -26,6 +27,7 @@ import AdvancedPanel from './AdvancedPanel';
 import CodebaseIndexPanel from './CodebaseIndexPanel';
 import IntegrationPanel from './IntegrationPanel';
 import FeedbackPanel from './FeedbackPanel';
+import VoicePanel from './VoicePanel';
 import type { Workspace } from '../../types';
 
 /** 设置页面可用的 section */
@@ -39,7 +41,8 @@ export type SettingsSection =
   | 'integration'
   | 'networkDiagnostics'
   | 'advanced'
-  | 'feedback';
+  | 'feedback'
+  | 'voice';
 
 interface NavItem {
   key: SettingsSection;
@@ -73,6 +76,7 @@ const NAV_GROUPS: NavGroup[] = [
       { key: 'integration', labelKey: 'settings.nav.integration', icon: FlaskConical },
       { key: 'networkDiagnostics', labelKey: 'settings.nav.networkDiagnostics', icon: Wifi },
       { key: 'advanced', labelKey: 'settings.nav.advanced', icon: Wrench },
+      { key: 'voice', labelKey: 'settings.nav.voice', icon: Mic },
       { key: 'feedback', labelKey: 'settings.nav.feedback', icon: MessageCircleQuestion },
     ],
     dividerAfter: false,
@@ -134,6 +138,9 @@ export default function SettingsPage({ onBack, initialSection, workspaces }: Set
     if (section === 'feedback') {
       return <FeedbackPanel autoCapture={false} />;
     }
+    if (section === 'voice') {
+      return <VoicePanel />;
+    }
     // 其他面板暂用占位
     return (
       <div className="flex items-center justify-center py-20 text-gray-400 dark:text-gray-500">
@@ -173,8 +180,8 @@ export default function SettingsPage({ onBack, initialSection, workspaces }: Set
                     onClick={() => setSection(item.key)}
                     className={`flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-xs transition-colors ${
                       active
-                        ? 'bg-blue-50 dark:bg-blue-900/30 font-medium text-blue-600 dark:text-blue-400'
-                        : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
+                        ? 'bg-[var(--brand-soft-bg)] font-medium text-[var(--brand-primary)]'
+                        : 'text-gray-700 dark:text-[#95958F] hover:bg-gray-100 dark:hover:bg-gray-800'
                     }`}
                   >
                     <item.icon size={14} className="shrink-0" />
@@ -192,8 +199,8 @@ export default function SettingsPage({ onBack, initialSection, workspaces }: Set
         {/* 拖拽手柄 */}
         <div
           {...handleProps}
-          className={`absolute inset-y-0 right-0 w-1 cursor-col-resize transition-colors hover:bg-blue-500/40 ${
-            isResizing ? 'bg-blue-500/40' : ''
+          className={`absolute inset-y-0 right-0 w-1 cursor-col-resize transition-colors hover:bg-[var(--brand-primary)]/40 ${
+            isResizing ? 'bg-[var(--brand-primary)]/40' : ''
           }`}
         />
       </aside>

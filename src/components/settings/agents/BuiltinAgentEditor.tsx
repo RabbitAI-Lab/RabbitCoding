@@ -56,12 +56,12 @@ function TagInput({
       {value.map((tag, i) => (
         <span
           key={i}
-          className="inline-flex items-center gap-0.5 rounded-md bg-blue-50 dark:bg-blue-900/30 px-1.5 py-0.5 text-[11px] text-blue-600 dark:text-blue-400"
+          className="inline-flex items-center gap-0.5 rounded-md bg-[var(--brand-soft-bg)] px-1.5 py-0.5 text-[11px] text-[var(--brand-primary)]"
         >
           {tag}
           <button
             onClick={() => handleRemove(i)}
-            className="hover:text-blue-800 dark:hover:text-blue-200 transition-colors"
+            className="hover:text-[var(--brand-primary-hover)] transition-colors"
           >
             <X size={10} />
           </button>
@@ -102,7 +102,7 @@ export default function BuiltinAgentEditor({
   }, [open, config]);
 
   const inputClass =
-    'w-full rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-[#2a2a2a] px-3 py-2 text-xs text-[#333333] dark:text-gray-100 placeholder-gray-300 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors';
+    'w-full rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-[#2a2a2a] px-3 py-2 text-xs text-[#333333] dark:text-gray-100 placeholder-gray-300 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[var(--brand-primary)]/20 focus:border-[var(--brand-primary)] transition-colors';
 
   const labelClass = 'block text-[11px] font-medium text-gray-500 dark:text-gray-400 mb-1';
 
@@ -177,7 +177,7 @@ export default function BuiltinAgentEditor({
           </button>
           <button
             onClick={() => onSave(draft)}
-            className="px-4 py-1.5 rounded-lg text-xs text-white bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-500 transition-colors"
+            className="px-4 py-1.5 rounded-lg text-xs text-white bg-[var(--brand-solid)] hover:bg-[var(--brand-solid-hover)] transition-colors"
           >
             {t('common.save')}
           </button>

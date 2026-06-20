@@ -42,7 +42,7 @@ export default function ScreenshotUploader({
             <img src={img} alt={`screenshot-${i + 1}`} className="h-full w-full object-cover" />
             {/* 自动截取标记 */}
             {hasAutoCaptured && i === 0 && (
-              <span className="absolute left-1 top-1 rounded bg-blue-600/80 px-1 py-0.5 text-[9px] font-medium text-white">
+              <span className="absolute left-1 top-1 rounded bg-[var(--brand-solid)]/80 px-1 py-0.5 text-[9px] font-medium text-white">
                 {t('settings.feedback.screenshots.autoCaptured')}
               </span>
             )}
@@ -61,7 +61,7 @@ export default function ScreenshotUploader({
           <button
             onClick={onAdd}
             disabled={capturing}
-            className="flex aspect-video items-center justify-center rounded-lg border border-dashed border-gray-300 dark:border-gray-600 text-gray-400 hover:border-blue-400 hover:text-blue-500 dark:text-gray-500 dark:hover:border-blue-400 dark:hover:text-blue-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex aspect-video items-center justify-center rounded-lg border border-dashed border-gray-300 dark:border-gray-600 text-gray-400 hover:border-[var(--brand-primary)] hover:text-[var(--brand-primary)] dark:text-gray-500 dark:hover:border-[var(--brand-primary)] dark:hover:text-[var(--brand-primary)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {capturing ? (
               <Loader2 size={18} className="animate-spin" />
@@ -77,7 +77,7 @@ export default function ScreenshotUploader({
         <button
           onClick={onCapture}
           disabled={capturing}
-          className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs text-[var(--brand-primary)] hover:bg-[var(--brand-soft-bg)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {capturing ? <Loader2 size={13} className="animate-spin" /> : <Camera size={13} />}
           {capturing

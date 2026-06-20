@@ -94,6 +94,25 @@ pub(super) fn emit_progress(
     );
 }
 
+/// 定向模式下判断当前作用域是否属于目标作用域。
+/// 非定向模式（target_doc_paths 为 None）恒为 true。
+pub(super) fn is_target_scope(payload: &GenerateWikiPayload, scope: Option<&str>) -> bool {
+    if payload.target_doc_paths.is_none() {
+        return true;
+    }
+    payload.target_repo_name.as_deref() == scope
+}
+
+/// 定向模式下按目标路径过滤 catalog 叶子节点；非定向模式无操作。
+pub(super) fn filter_target_leaves(
+    payload: &GenerateWikiPayload,
+    leaves: &mut Vec<(String, String)>,
+) {
+    if let Some(targets) = &payload.target_doc_paths {
+        leaves.retain(|(p, _)| targets.iter().any(|t| t == p));
+    }
+}
+
 /// 构造一个基础的 WikiProgress（用于 AI 调用循环）
 pub(super) fn make_progress_base(
     task_id: &str,

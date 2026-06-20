@@ -284,7 +284,7 @@ export default function GitHubConnectModal({ open, onClose, onConnected }: Props
         {/* requesting 状态 */}
         {flowState === 'requesting' && (
           <div className="flex flex-col items-center gap-3 py-6">
-            <Loader2 className="h-6 w-6 animate-spin text-blue-500" />
+            <Loader2 className="h-6 w-6 animate-spin text-[var(--brand-primary)]" />
             <p className="text-xs text-gray-400 dark:text-gray-500">
               {t('settings.integration.deviceFlow.requesting')}
             </p>
@@ -307,7 +307,7 @@ export default function GitHubConnectModal({ open, onClose, onConnected }: Props
               </div>
               <button
                 onClick={handleCopy}
-                className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 dark:border-gray-600 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+                className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 dark:border-gray-600 text-gray-400 hover:text-[var(--brand-primary)] hover:bg-[var(--brand-soft-bg)] transition-colors"
                 title={t('settings.integration.deviceFlow.copyCode')}
               >
                 {copied ? <Check size={16} className="text-green-500" /> : <Copy size={16} />}
@@ -317,7 +317,7 @@ export default function GitHubConnectModal({ open, onClose, onConnected }: Props
             {/* 打开浏览器按钮 */}
             <button
               onClick={() => openUrl(deviceData.verificationUri).catch(() => {})}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs text-[var(--brand-primary)] border border-[var(--brand-soft-border)] hover:bg-[var(--brand-soft-bg)] transition-colors"
             >
               <ExternalLink size={14} />
               {t('settings.integration.deviceFlow.openBrowser')}
@@ -362,7 +362,7 @@ export default function GitHubConnectModal({ open, onClose, onConnected }: Props
             )}
             <button
               onClick={handleRetry}
-              className="flex items-center gap-1.5 mt-1 px-3 py-1.5 rounded-md text-xs text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+              className="flex items-center gap-1.5 mt-1 px-3 py-1.5 rounded-md text-xs text-[var(--brand-primary)] border border-[var(--brand-soft-border)] hover:bg-[var(--brand-soft-bg)] transition-colors"
             >
               <RefreshCw size={14} />
               {t('settings.integration.connect')}

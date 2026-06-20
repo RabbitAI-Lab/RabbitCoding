@@ -66,14 +66,14 @@ export function WikiContentView({
   return (
     <div className="flex h-full flex-col">
       {/* 标签栏 */}
-      <div className="flex h-8 shrink-0 items-center border-b border-gray-200 bg-gray-50/70 dark:border-gray-700 dark:bg-[#1e1e1e]">
+      <div className="flex shrink-0 items-center border-b border-gray-200 dark:border-gray-700 dark:bg-[#1e1e1e]">
         {openTabs.length > 0 ? (
-          <div className="flex min-w-0 flex-1 overflow-x-auto">
+          <div className="thin-scrollbar flex min-w-0 flex-1 overflow-x-auto">
             {openTabs.map(tab => (
               <button
                 key={tab.path}
                 onClick={() => onSetActivePath(tab.path)}
-                className={`group flex h-8 w-[160px] shrink-0 items-center gap-1.5 border-r border-gray-200 px-2.5 text-xs transition-colors dark:border-gray-700 ${
+                className={`group flex h-9 w-[160px] shrink-0 items-center gap-1.5 border-r border-gray-200 px-2.5 text-xs transition-colors dark:border-gray-700 ${
                   activePath === tab.path
                     ? 'bg-white text-[#141414] dark:bg-[#252525] dark:text-gray-100'
                     : 'text-gray-500 hover:bg-white/70 hover:text-[#141414] dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100'
@@ -98,7 +98,7 @@ export function WikiContentView({
             ))}
           </div>
         ) : (
-          <span className="px-3 text-xs text-gray-400 dark:text-gray-500">{t('knowledgeBase.selectFile')}</span>
+          <div className="flex h-9 items-center px-3 text-xs text-gray-400 dark:text-gray-500">{t('knowledgeBase.selectFile')}</div>
         )}
       </div>
 

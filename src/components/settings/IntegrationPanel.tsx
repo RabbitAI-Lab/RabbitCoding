@@ -114,7 +114,7 @@ export default function IntegrationPanel() {
               <div className="flex w-full justify-end">
                 <button
                   onClick={() => setModalOpen(true)}
-                  className="flex items-center gap-1 px-2.5 py-1 rounded-md text-xs text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+                  className="flex items-center gap-1 px-2.5 py-1 rounded-md text-xs text-[var(--brand-primary)] border border-[var(--brand-soft-border)] hover:bg-[var(--brand-soft-bg)] transition-colors"
                 >
                   {t('settings.integration.connect')}
                 </button>

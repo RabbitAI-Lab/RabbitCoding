@@ -9,7 +9,8 @@ use crate::wiki::types::{FailedDoc, RepoInfo, WikiMeta};
 
 use super::catalog::load_catalog;
 use super::helpers::{
-    check_cancel, check_circuit_breaker, emit_progress, make_progress_base, GenCtx,
+    check_cancel, check_circuit_breaker, emit_progress, filter_target_leaves,
+    make_progress_base, GenCtx,
 };
 use super::meta::{new_repo_meta, save_meta};
 
@@ -142,7 +143,7 @@ pub(super) async fn generate_repo_wiki(
     }
 
     // ── 加载 catalog 叶子节点 ──
-    let leaves = match load_catalog(&repo_output_dir) {
+    let mut leaves = match load_catalog(&repo_output_dir) {
         Ok(l) => l,
         Err(e) => {
             eprintln!("[wiki] Failed to load catalog for {repo_name}: {e}");
@@ -158,6 +159,9 @@ pub(super) async fn generate_repo_wiki(
             return Ok(());
         }
     };
+
+    // 定向生成：仅保留目标文档（非定向模式无操作）
+    filter_target_leaves(ctx.payload, &mut leaves);
 
     let total = leaves.len() as i32;
     eprintln!("[wiki] Repo {repo_name} has {total} documents to generate");

@@ -169,7 +169,7 @@ export default function ModelEditModal({ open, config, onClose, onSave }: ModelE
 
   /** 输入框样式 */
   const inputClass =
-    'w-full rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-[#2a2a2a] px-3 py-2 text-sm text-[#141414] dark:text-gray-100 placeholder-gray-300 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors';
+    'w-full rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-[#2a2a2a] px-3 py-2 text-sm text-[#141414] dark:text-gray-100 placeholder-gray-300 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[var(--brand-primary)]/20 focus:border-[var(--brand-primary)] transition-colors';
 
   /** 标签样式 */
   const labelClass = 'block text-xs font-medium text-[#333333] dark:text-gray-200 mb-1';
@@ -192,7 +192,7 @@ export default function ModelEditModal({ open, config, onClose, onSave }: ModelE
                 onClick={() => handleProviderChange(preset.provider)}
                 className={`px-2.5 py-1 rounded-md text-xs transition-colors ${
                   form.provider === preset.provider
-                    ? 'bg-blue-600 text-white'
+                    ? 'bg-[var(--brand-solid)] text-white'
                     : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'
                 }`}
               >
@@ -303,7 +303,7 @@ export default function ModelEditModal({ open, config, onClose, onSave }: ModelE
             ))}
             <button
               onClick={addEnvVar}
-              className="flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors"
+              className="flex items-center gap-1 text-xs text-[var(--brand-primary)] hover:text-[var(--brand-primary-hover)] transition-colors"
             >
               <Plus size={14} />
               {t('settings.models.field.addEnvVar')}
@@ -353,7 +353,7 @@ export default function ModelEditModal({ open, config, onClose, onSave }: ModelE
           <button
             onClick={handleTest}
             disabled={testState.status === 'loading'}
-            className="mr-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800 hover:bg-blue-50 dark:hover:bg-blue-900/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="mr-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-[var(--brand-primary)] border border-[var(--brand-soft-border)] hover:bg-[var(--brand-soft-bg)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             {testState.status === 'loading' ? (
               <Loader2 size={13} className="animate-spin" />
@@ -372,7 +372,7 @@ export default function ModelEditModal({ open, config, onClose, onSave }: ModelE
           </button>
           <button
             onClick={handleSave}
-            className="px-4 py-1.5 rounded-lg text-xs text-white bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-500 transition-colors"
+            className="px-4 py-1.5 rounded-lg text-xs text-white bg-[var(--brand-solid)] hover:bg-[var(--brand-solid-hover)] transition-colors"
           >
             {t('common.save')}
           </button>

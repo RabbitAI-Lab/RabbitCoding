@@ -49,6 +49,8 @@ struct RabbitData {
     num_turns: Option<i64>,
     #[serde(default)]
     messages: Vec<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    worktree: Option<WorktreeInfoData>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -70,6 +72,36 @@ struct RepoData {
     id: String,
     name: String,
     path: String,
+    created_at: i64,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WorktreeRepoEntryData {
+    #[serde(default)]
+    repo_id: String,
+    #[serde(default)]
+    repo_name: String,
+    #[serde(default)]
+    original_path: String,
+    #[serde(default)]
+    worktree_path: String,
+    #[serde(default)]
+    branch: String,
+    #[serde(default)]
+    base_branch: String,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WorktreeInfoData {
+    #[serde(default)]
+    base_path: String,
+    #[serde(default)]
+    branch: String,
+    #[serde(default)]
+    repos: Vec<WorktreeRepoEntryData>,
+    #[serde(default)]
     created_at: i64,
 }
 
@@ -150,6 +182,7 @@ impl Database {
         for sql in [
             "ALTER TABLE rabbits ADD COLUMN token_usage TEXT",
             "ALTER TABLE rabbits ADD COLUMN num_turns INTEGER",
+            "ALTER TABLE rabbits ADD COLUMN worktree TEXT",
         ] {
             let _ = conn.execute(sql, []);
         }
@@ -192,7 +225,7 @@ fn load_all_inner(conn: &Connection) -> Result<String, String> {
         // 2a. 查 rabbits
         let mut rabbit_stmt = conn
             .prepare(
-                "SELECT id, title, completed, created_at, pinned, session_id, status, model, cost_usd, duration_ms, error, token_usage, num_turns \
+                "SELECT id, title, completed, created_at, pinned, session_id, status, model, cost_usd, duration_ms, error, token_usage, num_turns, worktree \
                  FROM rabbits WHERE workspace_id = ? ORDER BY created_at DESC",
             )
             .map_err(|e| e.to_string())?;
@@ -204,6 +237,10 @@ fn load_all_inner(conn: &Connection) -> Result<String, String> {
                 let token_usage = token_usage_str
                     .as_deref()
                     .and_then(|s| serde_json::from_str::<TokenUsageData>(s).ok());
+                let worktree_str: Option<String> = row.get(13)?;
+                let worktree = worktree_str
+                    .as_deref()
+                    .and_then(|s| serde_json::from_str::<WorktreeInfoData>(s).ok());
                 Ok(RabbitData {
                     id: row.get(0)?,
                     title: row.get(1)?,
@@ -219,6 +256,7 @@ fn load_all_inner(conn: &Connection) -> Result<String, String> {
                     token_usage,
                     num_turns: row.get(12)?,
                     messages: Vec::new(),
+                    worktree,
                 })
             })
             .map_err(|e| e.to_string())?
@@ -331,9 +369,14 @@ fn save_all_impl(conn: &Connection, workspaces: &[WorkspaceData]) -> Result<(), 
                 .as_ref()
                 .map(|u| serde_json::to_string(u).unwrap_or_default());
 
+            let worktree_json = rabbit
+                .worktree
+                .as_ref()
+                .map(|w| serde_json::to_string(w).unwrap_or_default());
+
             conn.execute(
-                "INSERT INTO rabbits (id, workspace_id, title, completed, created_at, pinned, session_id, status, model, cost_usd, duration_ms, error, token_usage, num_turns) \
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO rabbits (id, workspace_id, title, completed, created_at, pinned, session_id, status, model, cost_usd, duration_ms, error, token_usage, num_turns, worktree) \
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 params![
                     &rabbit.id,
                     &ws.id,
@@ -349,6 +392,7 @@ fn save_all_impl(conn: &Connection, workspaces: &[WorkspaceData]) -> Result<(), 
                     &rabbit.error,
                     &token_usage_json,
                     &rabbit.num_turns,
+                    &worktree_json,
                 ],
             )
             .map_err(|e| format!("Insert rabbit failed: {e}"))?;

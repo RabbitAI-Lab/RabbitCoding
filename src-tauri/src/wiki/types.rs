@@ -25,6 +25,12 @@ pub struct GenerateWikiPayload {
     pub max_retries: u32,
     #[serde(default = "default_max_consecutive")]
     pub max_consecutive_failures: u32,
+    /// 定向生成：None = 生成所有未完成文档；Some = 仅生成列出的文档
+    #[serde(default)]
+    pub target_doc_paths: Option<Vec<String>>,
+    /// 定向生成的作用域：None = workspace 级；Some(name) = 仅该 repo
+    #[serde(default)]
+    pub target_repo_name: Option<String>,
 }
 
 pub fn default_language() -> String {

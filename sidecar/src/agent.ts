@@ -19,6 +19,7 @@ import type {
   StartQueryCommand,
   ResumeQueryCommand,
   CompactQueryCommand,
+  RewindFilesCommand,
   AgentEvent,
   AgentMessage,
   TokenUsage,
@@ -393,6 +394,13 @@ async function runQuery(
       maxBudgetUsd: options.maxBudgetUsd,
       thinking: { type: "adaptive" },
       includePartialMessages: true,
+      // 启用文件检查点：CLI 自动在文件修改前将备份写入 ~/.claude/file-history/{sessionId}/
+      // replay-user-messages: 必须设置，否则 SDK 不在响应流中回放 user 消息的 uuid
+      // 仅对编码查询启用（spec 查询 id 以 __spec__ 开头时跳过）
+      ...(id.startsWith("__spec__") ? {} : {
+        enableFileCheckpointing: true,
+        extraArgs: { "replay-user-messages": null },
+      }),
       // SDK 层兜底：不加载任何文件系统 settings。
       // 主隔离手段是 sidecar.rs 注入的 CLAUDE_CONFIG_DIR（指向应用专用空目录），
       // 它一刀切断 ~/.claude/ 下的 settings/plugins/skills/agents/commands/hooks
@@ -451,6 +459,7 @@ async function runQuery(
     for await (const message of query({ prompt, options: queryOptions })) {
       const msg = message as any;
 
+
       // 处理系统初始化消息
       if (msg.type === "system" && msg.subtype === "init") {
         emit(id, {
@@ -483,6 +492,11 @@ async function runQuery(
           durationMs: meta?.duration_ms,
         });
         emit(id, { type: "compaction", phase: "done" });
+        continue;
+      }
+
+      // 忽略 thinking_tokens 系统消息（SDK 思考 token 估算反馈，当前前端未使用）
+      if (msg.type === "system" && msg.subtype === "thinking_tokens") {
         continue;
       }
 
@@ -565,6 +579,17 @@ async function runQuery(
         continue;
       }
 
+      // 捕获 user 消息的 uuid（用于 rewindFiles checkpoint 回滚）
+      // replay-user-messages 选项使 SDK 在流中回放所有 user 消息（含 uuid）
+      // 每次收到都更新，保留最后一个 uuid（即当前 prompt 的 checkpoint）
+      if (msg.type === "user" && msg.uuid) {
+        emit(id, {
+          type: "user_message_uuid",
+          sdkUuid: msg.uuid as string,
+        });
+        continue;
+      }
+
       // 忽略其他消息类型，但打印诊断日志（排查 ZodError 等 SDK 内部错误）
       if (msg.type) {
         process.stderr.write(`[agent] unhandled msg: type=${msg.type} subtype=${msg.subtype ?? ""} keys=[${Object.keys(msg).join(",")}]\n`);
@@ -643,6 +668,72 @@ export async function handleCompactQuery(
   const { id, sessionId, cwd, options } = command;
   // 使用 /compact prompt 恢复会话，SDK 会自动触发压缩
   await runQuery(id, "/compact", options, { resume: sessionId, cwd });
+}
+
+/**
+ * 回滚文件到指定 user message 的 checkpoint 状态
+ *
+ * 复用 Claude SDK 的 rewindFiles 能力（官方文档推荐模式）：
+ * - 用空 prompt resume 同一 sessionId，打开 CLI 连接
+ * - 在 for-await 循环中收到第一条消息时调用 rewindFiles()
+ * - break 退出循环，CLI 进程自然结束
+ */
+export async function handleRewindFiles(
+  command: RewindFilesCommand
+): Promise<void> {
+  const { id, sessionId, userMessageId, cwd, dryRun } = command;
+
+  process.stderr.write(`[agent] rewind_files: id=${id}, sessionId=${sessionId}, userMessageId=${userMessageId}, dryRun=${dryRun ?? false}\n`);
+
+  try {
+    // 用空 prompt resume 会话，打开 CLI 连接（官方文档推荐模式）
+    const rewindQuery = query({
+      prompt: "",
+      options: {
+        resume: sessionId,
+        cwd,
+        enableFileCheckpointing: true,
+        // 复用与编码查询相同的隔离配置
+        settingSources: [],
+        ...(NATIVE_CLI_BINARY ? { pathToClaudeCodeExecutable: NATIVE_CLI_BINARY } : {}),
+      },
+    });
+
+    // 在 for-await 循环中收到第一条消息时调用 rewindFiles，然后 break
+    // 这是官方文档推荐的模式：空 prompt 打开连接 → rewindFiles → break
+    let rewindDone = false;
+    for await (const msg of rewindQuery) {
+      if (!rewindDone) {
+        rewindDone = true;
+        const result = await rewindQuery.rewindFiles(userMessageId, { dryRun: dryRun ?? false });
+
+        process.stderr.write(`[agent] rewind_files result: canRewind=${result.canRewind}, filesChanged=${result.filesChanged?.length ?? 0}, error=${result.error ?? "(none)"}\n`);
+
+        // emit 回滚结果到前端
+        emit(id, {
+          type: "rewind_result",
+          success: result.canRewind,
+          error: result.error,
+          filesChanged: result.filesChanged,
+          insertions: result.insertions,
+          deletions: result.deletions,
+          dryRun: dryRun ?? false,
+          userMessageId,
+        });
+        break;
+      }
+    }
+  } catch (err: unknown) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    process.stderr.write(`[agent] rewind_files error: ${errorMessage}\n`);
+    emit(id, {
+      type: "rewind_result",
+      success: false,
+      error: errorMessage,
+      dryRun: dryRun ?? false,
+      userMessageId,
+    });
+  }
 }
 
 /**

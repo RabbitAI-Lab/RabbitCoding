@@ -1,4 +1,4 @@
-import { BookOpen, Loader2, Sparkles } from 'lucide-react';
+import { Carrot, Loader2 } from 'lucide-react';
 import type { KnowledgeBaseConfig, ModelConfig, Workspace } from '../../types';
 import { useI18n } from '../../i18n/useI18n';
 import { Toggle } from '../settings/settingsShared';
@@ -10,7 +10,6 @@ interface WikiSetupViewProps {
   generating: boolean;
   selectedModel: ModelConfig | undefined;
   treeError: string | null;
-  onGenerate: () => void;
   onGenerateAIWiki: () => void;
   onUpdateConfig: (patch: Partial<KnowledgeBaseConfig>) => void;
 }
@@ -22,7 +21,6 @@ export function WikiSetupView({
   generating,
   selectedModel,
   treeError,
-  onGenerate,
   onGenerateAIWiki,
   onUpdateConfig,
 }: WikiSetupViewProps) {
@@ -90,19 +88,11 @@ export function WikiSetupView({
 
         <div className="mt-5 flex items-center gap-3">
           <button
-            onClick={onGenerate}
-            disabled={!workspace?.path || generating}
-            className="flex h-8 items-center gap-1.5 rounded-md bg-gray-200 px-3 text-xs font-medium text-[#333333] transition-colors hover:bg-gray-300 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
-          >
-            {generating ? <Loader2 size={14} className="animate-spin" /> : <BookOpen size={14} />}
-            {t('knowledgeBase.quickOverview')}
-          </button>
-          <button
             onClick={onGenerateAIWiki}
             disabled={!workspace?.path || generating || !selectedModel}
-            className="flex h-8 items-center gap-1.5 rounded-md bg-blue-600 px-3 text-xs font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex h-8 items-center gap-1.5 rounded-md bg-[var(--brand-solid)] px-3 text-xs font-medium text-white transition-colors hover:bg-[var(--brand-solid-hover)] disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {generating ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+            {generating ? <Loader2 size={14} className="animate-spin" /> : <Carrot size={14} />}
             {t('knowledgeBase.aiGenerate')}
           </button>
           {workspaceConfig.generatedAt && (

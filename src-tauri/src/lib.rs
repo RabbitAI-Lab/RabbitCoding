@@ -2,6 +2,7 @@ mod sidecar;
 mod db;
 mod network;
 mod model_test;
+mod prompt_optimize;
 mod gitnexus;
 mod integration;
 mod feedback;
@@ -9,6 +10,8 @@ mod ecc;
 mod claude_mem;
 mod auth;
 mod wiki;
+mod voice;
+mod worktree;
 
 use serde::Serialize;
 use std::collections::{BTreeMap, HashSet};
@@ -824,6 +827,7 @@ pub fn run() {
             Ok(())
         })
         .manage(sidecar::SidecarState::new())
+        .manage(voice::VoiceState::new())
         .invoke_handler(tauri::generate_handler![
             greet,
             activate_main_window,
@@ -849,6 +853,7 @@ pub fn run() {
             network::diag_ping,
             network::diag_marketplace,
             model_test::test_model_connection,
+            prompt_optimize::optimize_prompt,
             gitnexus::gitnexus_install,
             gitnexus::gitnexus_uninstall,
             gitnexus::gitnexus_check,
@@ -883,6 +888,18 @@ pub fn run() {
             wiki::list_codewiki_tree,
             wiki::list_codewiki_catalogs,
             wiki::wiki_check_pending,
+            voice::asr_status,
+            voice::asr_ensure_model,
+            voice::asr_start,
+            voice::asr_feed_chunk,
+            voice::asr_stop,
+            voice::asr_list_models,
+            voice::asr_get_config,
+            voice::asr_set_config,
+            voice::asr_redownload_model,
+            worktree::create_worktree,
+            worktree::remove_worktree,
+            worktree::list_worktrees,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

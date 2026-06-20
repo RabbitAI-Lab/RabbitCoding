@@ -13,6 +13,7 @@ import {
   Maximize2,
   Minimize2,
   FolderGit2,
+  GitBranch,
   Plus,
   Pencil,
   Trash2,
@@ -260,9 +261,10 @@ interface RightPanelProps {
   onAddRepo?: () => void;
   onEditRepo?: (repo: Repo) => void;
   onDeleteRepo?: (repoId: string) => void;
+  onClearWorktree?: () => void;
 }
 
-export default function RightPanel({ maximized, onToggleMaximize, selectedRabbit, workspacePath, workspaceId, specTabSignal, onAddRepo, onEditRepo, onDeleteRepo }: RightPanelProps) {
+export default function RightPanel({ maximized, onToggleMaximize, selectedRabbit, workspacePath, workspaceId, specTabSignal, onAddRepo, onEditRepo, onDeleteRepo, onClearWorktree }: RightPanelProps) {
   const { t } = useI18n();
   const [activeTab, setActiveTab] = useState<TabKey>('summary');
   const { indexStates, gitnexusAvailable, workspaces, triggerIndex } = useCodebaseIndex();
@@ -295,6 +297,7 @@ export default function RightPanel({ maximized, onToggleMaximize, selectedRabbit
     artifacts: false,
     references: false,
     indexStatus: false,
+    worktree: false,
   });
 
   const toggleGroup = (key: string) => {
@@ -675,6 +678,65 @@ export default function RightPanel({ maximized, onToggleMaximize, selectedRabbit
                 </div>
               )}
             </div>
+
+            <div className="border-t border-dashed border-gray-200 dark:border-gray-700" />
+            {/* Group: Worktree 镜像 */}
+            {selectedRabbit?.worktree && (
+              <div className="p-3">
+                <button
+                  onClick={() => toggleGroup('worktree')}
+                  className="flex items-center justify-between w-full text-xs font-normal text-[#646261] dark:text-gray-400 mb-2"
+                >
+                  <span>{t('rightPanel.worktree')}</span>
+                  <span className="flex items-center gap-1">
+                    {onClearWorktree && (
+                      <span
+                        role="button"
+                        onClick={(e) => { e.stopPropagation(); onClearWorktree(); }}
+                        title={t('rightPanel.worktreeClean')}
+                        className="flex items-center text-gray-400 hover:text-red-500 dark:text-gray-500 dark:hover:text-red-400 transition-colors"
+                      >
+                        <Trash2 size={13} />
+                      </span>
+                    )}
+                    <ChevronDown
+                      size={14}
+                      className={`transition-transform text-gray-400 dark:text-gray-500 ${collapsed.worktree ? '-rotate-90' : ''}`}
+                    />
+                  </span>
+                </button>
+                {!collapsed.worktree && (
+                  <div className="flex flex-col gap-1 pl-1">
+                    {/* 分支名 */}
+                    <div className="flex items-center gap-2 text-xs">
+                      <GitBranch size={12} className="text-gray-300 dark:text-gray-600 shrink-0" />
+                      <span className="text-gray-500 dark:text-gray-400">{t('rightPanel.worktreeBranch')}</span>
+                      <span className="text-[#141414] dark:text-gray-100 truncate">{selectedRabbit.worktree.branch}</span>
+                    </div>
+                    {/* 镜像根目录 */}
+                    <div className="flex items-center gap-2 text-xs">
+                      <FolderOpen size={12} className="text-gray-300 dark:text-gray-600 shrink-0" />
+                      <span className="text-gray-500 dark:text-gray-400">{t('rightPanel.worktreePath')}</span>
+                      <span className="text-[#141414] dark:text-gray-100 truncate flex-1" title={selectedRabbit.worktree.basePath}>{selectedRabbit.worktree.basePath}</span>
+                    </div>
+                    {/* 各 repo 状态 */}
+                    {selectedRabbit.worktree.repos.map((repo, i) => (
+                      <div key={i} className="flex items-center gap-2 text-xs pl-4">
+                        {repo.skipReason ? (
+                          <AlertCircle size={12} className="text-orange-400 dark:text-orange-500 shrink-0" />
+                        ) : (
+                          <CheckCircle2 size={12} className="text-emerald-500 shrink-0" />
+                        )}
+                        <span className="text-[#141414] dark:text-gray-100 truncate">{repo.repoName}</span>
+                        {repo.skipReason && (
+                          <span className="text-[11px] text-orange-500 dark:text-orange-400 truncate" title={repo.skipReason}>{t('rightPanel.worktreeSkipped')}</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="border-t border-dashed border-gray-200 dark:border-gray-700" />
             {/* Group: 索引状态 */}

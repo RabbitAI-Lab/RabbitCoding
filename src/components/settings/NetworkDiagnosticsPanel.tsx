@@ -78,7 +78,7 @@ function FieldRow({ label, children }: { label: string; children?: React.ReactNo
 function SectionLoading() {
   return (
     <div className="flex items-center justify-center py-6">
-      <Loader2 size={16} className="text-blue-500 dark:text-blue-400 animate-spin" />
+      <Loader2 size={16} className="text-[var(--brand-primary)] animate-spin" />
     </div>
   );
 }
@@ -385,7 +385,7 @@ export default function NetworkDiagnosticsPanel() {
         <button
           onClick={runDiagnostics}
           disabled={running}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-white bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-white bg-[var(--brand-solid)] hover:bg-[var(--brand-solid-hover)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           {running ? (
             <>

@@ -123,6 +123,8 @@ pub fn wiki_retry_failed(
             base_url: payload.base_url.clone(),
             language: payload.language.clone(),
             resume_mode: true,
+            target_doc_paths: None,
+            target_repo_name: None,
             max_retries: super::DEFAULT_MAX_RETRIES,
             max_consecutive_failures: super::DEFAULT_MAX_CONSECUTIVE_FAILURES,
         },
@@ -185,6 +187,8 @@ pub fn wiki_retry_failed(
         base_url: payload.base_url,
         language: payload.language,
         resume_mode: true,
+        target_doc_paths: payload.doc_paths.clone(),
+        target_repo_name: payload.repo_name.clone(),
         max_retries: super::DEFAULT_MAX_RETRIES,
         max_consecutive_failures: super::DEFAULT_MAX_CONSECUTIVE_FAILURES,
     };

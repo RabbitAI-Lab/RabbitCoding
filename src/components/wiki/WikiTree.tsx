@@ -74,7 +74,7 @@ function CatalogOutlineTree({
             size={12}
             className={`shrink-0 text-gray-400 transition-transform dark:text-gray-500 ${expanded ? 'rotate-90' : ''}`}
           />
-          <BookOpen size={14} className="shrink-0 text-blue-500 dark:text-blue-400" />
+          <BookOpen size={14} className="shrink-0 text-gray-400 dark:text-gray-500" />
           <span className="truncate font-medium">{node.title}</span>
         </button>
         {expanded && node.children?.map(child => renderNode(child, depth + 1, key))}

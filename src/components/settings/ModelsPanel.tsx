@@ -60,7 +60,7 @@ export default function ModelsPanel() {
           <p className="text-xs text-gray-400 dark:text-gray-500">{t('settings.models.description')}</p>
           <button
             onClick={handleAdd}
-            className="flex items-center gap-1 px-2.5 py-1 rounded-md text-xs text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+            className="flex items-center gap-1 px-2.5 py-1 rounded-md text-xs text-[var(--brand-primary)] border border-[var(--brand-soft-border)] hover:bg-[var(--brand-soft-bg)] transition-colors"
           >
             <Plus size={14} />
             {t('settings.models.addModel')}
@@ -74,7 +74,7 @@ export default function ModelsPanel() {
             <p className="text-xs text-gray-400 dark:text-gray-500">{t('settings.models.empty')}</p>
             <button
               onClick={handleAdd}
-              className="mt-3 flex items-center gap-1 px-3 py-1.5 rounded-md text-xs text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+              className="mt-3 flex items-center gap-1 px-3 py-1.5 rounded-md text-xs text-[var(--brand-primary)] border border-[var(--brand-soft-border)] hover:bg-[var(--brand-soft-bg)] transition-colors"
             >
               <Plus size={14} />
               {t('settings.models.addModel')}
@@ -110,7 +110,7 @@ export default function ModelsPanel() {
                     {/* 编辑 */}
                     <button
                       onClick={() => handleEdit(config)}
-                      className="p-1.5 rounded-md text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+                      className="p-1.5 rounded-md text-gray-400 hover:text-[var(--brand-primary)] hover:bg-[var(--brand-soft-bg)] transition-colors"
                     >
                       <Pencil size={13} />
                     </button>

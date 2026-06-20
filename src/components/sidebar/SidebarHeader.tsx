@@ -66,10 +66,10 @@ export default function SidebarHeader({ store }: SidebarHeaderProps) {
   const canCreate = workspaceName.trim().length > 0;
 
   return (
-    <div className="flex flex-col gap-1 px-3 pt-2 pb-1">
+    <div className="flex flex-col gap-1 px-3 pt-2 pb-1 select-none">
       <button
         onClick={handleCreateRabbit}
-        className="flex w-full h-8 items-center gap-1.5 rounded-md border border-[#E6E6E6] bg-[#FFFFFF] px-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 dark:border-gray-700 dark:bg-[#2a2a2a] dark:text-gray-300 dark:hover:bg-blue-900/30 dark:hover:text-blue-400 transition-colors"
+        className="flex w-full h-8 items-center gap-1.5 rounded-md border border-[#E6E6E6] bg-[#FFFFFF] px-2 text-sm text-gray-700 hover:bg-[var(--brand-soft-bg)] hover:text-[var(--brand-primary)] dark:border-gray-700 dark:bg-[#2a2a2a] dark:text-gray-300 dark:hover:bg-[var(--brand-soft-bg)] dark:hover:text-[var(--brand-primary)] transition-colors"
       >
         <Plus size={14} />
         <span className="text-xs text-[#141414] dark:text-gray-100">{t('sidebar.header.createRabbit')}</span>
@@ -82,7 +82,7 @@ export default function SidebarHeader({ store }: SidebarHeaderProps) {
         <span className="text-xs text-[#919191] dark:text-gray-400">Rabbits</span>
         <Tooltip content={t('sidebar.header.createWorkspace')} className="ml-auto">
           <button
-            className="rounded p-0.5 text-[#919191] dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+            className="rounded p-0.5 text-[#919191] dark:text-gray-400 hover:text-[var(--brand-primary)] transition-colors"
             onClick={handleOpenModal}
           >
             <FolderPlus size={14} />
