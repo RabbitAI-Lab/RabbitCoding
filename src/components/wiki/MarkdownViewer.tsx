@@ -411,7 +411,7 @@ ${sel} .cherry-flex-toc .cherry-toc-one-a {
             toolbar: [],
             bubble: false,
             float: false,
-            toc: true,
+            toc: {},
           },
           editor: {
             height: '100%',
@@ -560,8 +560,8 @@ ${sel} .cherry-flex-toc .cherry-toc-one-a {
       const s = parseFloat(figure.dataset.scale || '1');
       const tx = parseFloat(figure.dataset.tx || '0');
       const ty = parseFloat(figure.dataset.ty || '0');
-      (svg as HTMLElement).style.transform = `translate(${tx}px, ${ty}px) scale(${s})`;
-      (svg as HTMLElement).style.transformOrigin = 'top center';
+      svg.style.transform = `translate(${tx}px, ${ty}px) scale(${s})`;
+      svg.style.transformOrigin = 'top center';
     };
 
     // 仅在按住 Ctrl/Cmd 时滚轮才触发缩放，否则放行页面正常滚动（业界标准交互）

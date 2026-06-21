@@ -41,7 +41,6 @@ export default function KnowledgeBasePage({ workspace }: KnowledgeBasePageProps)
     updateConfig,
     loadCodeWiki,
     loadMetaStatus,
-    handleGenerate,
     handleGenerateAIWiki,
     handleCancelTask,
     handleClearQueue,
