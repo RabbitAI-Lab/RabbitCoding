@@ -1,0 +1,14 @@
+schema_version: 1
+module_path: logging_system
+title: 日志系统
+scope: []
+source_files:
+    - src-tauri/src/lib.rs
+    - src-tauri/src/auth.rs
+    - src-tauri/src/network.rs
+    - src-tauri/src/integration.rs
+    - src/App.tsx
+    - src/components/ContentArea.tsx
+    - sidecar/scripts/setup-resources.mjs
+depends_on: []
+related_to: []

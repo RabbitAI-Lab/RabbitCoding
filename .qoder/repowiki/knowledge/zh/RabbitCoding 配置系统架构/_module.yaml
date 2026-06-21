@@ -1,0 +1,14 @@
+schema_version: 1
+module_path: configuration_system
+title: RabbitCoding 配置系统架构
+scope: []
+source_files:
+    - src-tauri/tauri.conf.json
+    - src-tauri/src/lib.rs
+    - src-tauri/src/sidecar.rs
+    - src-tauri/src/db.rs
+    - sidecar/src/agent.ts
+    - vite.config.ts
+    - src/hooks/useLocalStorage.ts
+depends_on: []
+related_to: []

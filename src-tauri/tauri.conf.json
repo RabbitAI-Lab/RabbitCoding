@@ -62,6 +62,14 @@
       "desktop": {
         "schemes": ["rabbitcoding"]
       }
+    },
+    "updater": {
+      "active": true,
+      "endpoints": [
+        "https://github.com/RabbitAI-Lab/RabbitCoding/releases/download/nightly/latest.json"
+      ],
+      "dialog": true,
+      "pubkey": "RWRbtrfue8ftTvhEm+yZRekI9JITEy2cIMTzCHYNOxYtChKV+BeXNcoK"
     }
   }
 }

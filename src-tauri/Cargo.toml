@@ -37,6 +37,7 @@ base64 = "0.22"
 image = { version = "0.25", default-features = false, features = ["jpeg"] }
 tauri-plugin-notification = "2.3.3"
 tauri-plugin-deep-link = "2"
+tauri-plugin-updater = "2"
 
 # sherpa-onnx 官方未提供 Windows ARM64 预编译库
 # 仅在受支持的目标上启用语音识别功能

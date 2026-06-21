@@ -1,0 +1,9 @@
+schema_version: 1
+module_path: ""
+title: Rabbit Coding 桌面应用
+scope: []
+source_files: []
+depends_on: []
+related_to: []
+field_sources:
+    adr: session

@@ -1,0 +1,8 @@
+schema_version: 1
+module_path: sidecar
+title: Claude Agent SDK 桥接与协议网关
+scope:
+    - sidecar/
+source_files: []
+depends_on: []
+related_to: []

@@ -2,72 +2,103 @@
 schema_version: 1
 locale: zh-CN
 branch: main
-exported_at: "2026-06-20T05:25:19Z"
+nodes_managed: true
+exported_at: "2026-06-21T21:46:59Z"
 modules:
     "":
-        dir_name: RabbitCoding AI 智能体桌面应用
-        title: RabbitCoding AI 智能体桌面应用
-        scope: []
-        source_files: []
-        children: []
-        depends_on: []
-        related_to: []
-    decisions:
-        dir_name: 决策记录
-        title: 决策记录
+        dir_name: RabbitCoding AI 编程助手
+        title: RabbitCoding AI 编程助手
         scope: []
         source_files: []
         children:
-            - decisions/dc1bf71b0528_6cbc3bc6c60c
-            - decisions/dc1bf71b0528_2855ad5aec29
+            - frontend
+            - sidecar
+            - tauri_backend
         depends_on: []
         related_to: []
-    decisions/dc1bf71b0528_6cbc3bc6c60c:
-        dir_name: 移除对话统计行并改用逐轮 Markdown 复制
-        title: 移除对话统计行并改用逐轮 Markdown 复制
+    configuration_system:
+        dir_name: RabbitCoding 配置系统架构
+        title: RabbitCoding 配置系统架构
         scope: []
-        source_files: []
+        source_files:
+            - src-tauri/tauri.conf.json
+            - src-tauri/src/lib.rs
+            - src-tauri/src/sidecar.rs
+            - src-tauri/src/db.rs
+            - sidecar/src/agent.ts
+            - vite.config.ts
+            - src/hooks/useLocalStorage.ts
         children: []
         depends_on: []
         related_to: []
-    decisions/dc1bf71b0528_2855ad5aec29:
-        dir_name: 统一使用 Claude CLI 进行插件安装与配置隔离
-        title: 统一使用 Claude CLI 进行插件安装与配置隔离
+    dependency_management:
+        dir_name: 多语言混合依赖管理 (pnpm + Cargo)
+        title: 多语言混合依赖管理 (pnpm + Cargo)
         scope: []
-        source_files: []
+        source_files:
+            - package.json
+            - pnpm-lock.yaml
+            - pnpm-workspace.yaml
+            - sidecar/package.json
+            - sidecar/pnpm-lock.yaml
+            - src-tauri/Cargo.toml
+            - src-tauri/Cargo.lock
+        children: []
+        depends_on: []
+        related_to: []
+    error_handling:
+        dir_name: 错误处理策略：ResultString 与 JSON-lines 事件流
+        title: 错误处理策略：Result<String> 与 JSON-lines 事件流
+        scope: []
+        source_files:
+            - src-tauri/src/lib.rs
+            - src-tauri/src/auth.rs
+            - src-tauri/src/db.rs
+            - sidecar/src/agent.ts
+            - sidecar/src/index.ts
+            - src/utils/notify.ts
         children: []
         depends_on: []
         related_to: []
     frontend:
-        dir_name: AI 智能体交互与多工作区管理前端
-        title: AI 智能体交互与多工作区管理前端
+        dir_name: AI 编程助手前端应用
+        title: AI 编程助手前端应用
         scope:
             - src/
         source_files: []
         children: []
         depends_on: []
-        related_to:
-            - path: sidecar
-            - path: tauri_backend
+        related_to: []
+    logging_system:
+        dir_name: 日志系统
+        title: 日志系统
+        scope: []
+        source_files:
+            - src-tauri/src/lib.rs
+            - src-tauri/src/auth.rs
+            - src-tauri/src/network.rs
+            - src-tauri/src/integration.rs
+            - src/App.tsx
+            - src/components/ContentArea.tsx
+            - sidecar/scripts/setup-resources.mjs
+        children: []
+        depends_on: []
+        related_to: []
     sidecar:
-        dir_name: Claude Agent SDK 桥接服务
-        title: Claude Agent SDK 桥接服务
+        dir_name: Claude Agent SDK 桥接与协议网关
+        title: Claude Agent SDK 桥接与协议网关
         scope:
             - sidecar/
         source_files: []
         children: []
         depends_on: []
-        related_to:
-            - path: frontend
-            - path: tauri_backend
+        related_to: []
     tauri_backend:
-        dir_name: Tauri 应用后端核心
-        title: Tauri 应用后端核心
+        dir_name: Rabbit Coding Tauri 后端核心
+        title: Rabbit Coding Tauri 后端核心
         scope:
             - src-tauri/
         source_files: []
         children: []
         depends_on: []
-        related_to:
-            - path: sidecar
-            - path: frontend
+        related_to: []

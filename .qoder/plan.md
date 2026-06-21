@@ -1,3 +1,70 @@
+# 每次推送 main 自动创建独立 tag + Release
+
+## Context
+
+当前 workflow 的设计是：push 到 main 分支时，所有产物统一上传到固定的 `nightly` tag/release。用户希望每次 push 到 main 都创建基于「日期 + commit sha」的**独立 tag 和 Release**，保留每次构建的历史记录。
+
+经排查，项目当前**未启用 Tauri updater 插件**（`tauri.conf.json` 无 updater 配置、`Cargo.toml` 无 `tauri-plugin-updater`），因此不需要维护稳定的 `nightly` 滚动 tag 用于自动更新。这使得改造非常简单。
+
+## 修改文件
+
+**`.github/workflows/build.yml`** — 仅此一个文件
+
+## 具体改动
+
+### 1. 修改 `Compute release metadata` 步骤的 nightly tag 名（核心改动）
+
+**位置**：`build.yml` 第 150 行附近
+
+**现状**：
+```bash
+TAG_NAME="nightly"
+```
+
+**改为**：
+```bash
+TAG_NAME="nightly-${DATE}-${SHORT_SHA}"
+```
+
+效果：每次 push 到 main 会创建如 `nightly-20260622-abc1234` 的唯一 tag 和对应 Release，不再覆盖固定的 `nightly` release。
+
+> 其余字段（`RELEASE_NAME="Nightly ${DATE} (${SHORT_SHA})"`、`APP_VERSION`、`PRERELEASE=true`）保持不变。
+
+### 2. 更新 updater endpoint 注入逻辑（防止未来启用 updater 时出错）
+
+**位置**：`build.yml` 第 170 行的 node -e 脚本
+
+**现状**：endpoint 硬编码指向固定 `nightly` tag：
+```javascript
+c.plugins.updater.endpoints=['https://github.com/'+process.env.REPO+'/releases/download/nightly/latest.json'];
+```
+
+**改为**：使用动态 tag 名（与当前构建的 tag 一致）：
+```javascript
+c.plugins.updater.endpoints=['https://github.com/'+process.env.REPO+'/releases/download/'+process.env.TAG_NAME+'/latest.json'];
+```
+
+需要在 env 中增加 `TAG_NAME: ${{ steps.rel.outputs.tag_name }}`。
+
+> 虽然当前项目未启用 updater（此段代码是空操作），但修改后逻辑更正确，未来启用 updater 时无需再改。
+
+## 不需要改动的部分
+
+- **concurrency group**（第 14-16 行）：`group: ${{ github.workflow }}-${{ github.ref }}` — 已经能确保同一 ref 的新推送取消旧的构建，无需调整
+- **正式版（v* tag）逻辑**：完全不变，仍走 `IS_NIGHTLY=false` 分支
+- **tauri-action 配置**：`tagName` 已经引用 `steps.rel.outputs.tag_name`，会自动使用新的唯一 tag 名
+
+## 可选后续（本次不做）
+
+- **旧 `nightly` tag/release 清理**：历史遗留的固定 `nightly` release 会继续存在但不再更新。可手动删除，或保留作历史记录。
+- **Release 自动清理**：随着时间推移，nightly Release 会累积。可后续添加定期清理脚本删除 30 天前的 nightly-* release。
+
+## 验证方式
+
+1. 推送代码到 main 分支，触发 workflow
+2. 检查 GitHub Actions 运行日志：`Compute release metadata` 步骤应输出 `tag_name=nightly-YYYYMMDD-sha7`
+3. 检查 GitHub Releases 页面：应看到新的 `nightly-YYYYMMDD-sha7` tag 和对应 Release，而非覆盖旧的 `nightly`
+4. 多次推送后确认每次都创建独立 Release
 # Rabbit Coding Hero 落地页网站
 
 ## Context

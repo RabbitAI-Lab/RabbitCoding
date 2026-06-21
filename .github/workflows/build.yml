@@ -147,7 +147,7 @@ jobs:
             DATE=$(date -u +%Y%m%d)
             SHORT_SHA=${GITHUB_SHA::7}
             IS_NIGHTLY=true
-            TAG_NAME="nightly"
+            TAG_NAME="nightly-${DATE}-${SHORT_SHA}"
             APP_VERSION="${BASE_VERSION}-${DAYS}"
             PRERELEASE=true
             RELEASE_NAME="Nightly ${DATE} (${SHORT_SHA})"
@@ -193,3 +193,49 @@ jobs:
           prerelease: ${{ steps.rel.outputs.prerelease }}
           updaterJsonPreferNsis: true
           args: --target ${{ matrix.target }} ${{ steps.rel.outputs.bundle_args }}
+
+  # ---- 同步滚动 nightly tag/release:始终指向最新构建,供 updater 和稳定下载入口 ----
+  sync-nightly:
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Sync nightly rolling tag & release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SHORT_SHA: ${{ github.sha }}
+        run: |
+          DATE=$(date -u +%Y%m%d)
+          ARCHIVE_TAG="nightly-${DATE}-${SHORT_SHA::7}"
+
+          echo "=== Syncing nightly tag to latest commit ==="
+          # force-move nightly tag 到当前 commit
+          git push origin :refs/tags/nightly 2>/dev/null || true
+          git tag -f nightly "$SHORT_SHA"
+          git push origin refs/tags/nightly
+
+          echo "=== Recreating nightly release ==="
+          # 删除旧的滚动 nightly release
+          gh release delete nightly -y 2>/dev/null || true
+          # 创建新的滚动 nightly release(prerelease)
+          gh release create nightly \
+            --target "$SHORT_SHA" \
+            --title "Nightly (Latest Build)" \
+            --notes "Latest nightly build. Archived builds: nightly-* tags." \
+            --prerelease
+
+          echo "=== Copying assets from $ARCHIVE_TAG to nightly ==="
+          # 从独立归档 release 下载全部 assets(安装包 + latest.json),上传到滚动 release
+          TEMP_DIR=$(mktemp -d)
+          gh release download "$ARCHIVE_TAG" --dir "$TEMP_DIR" --clobber
+          gh release upload nightly "$TEMP_DIR"/* --clobber
+          rm -rf "$TEMP_DIR"
+
+          echo "=== Done. nightly release synced. ==="
