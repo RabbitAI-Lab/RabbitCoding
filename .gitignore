@@ -24,4 +24,5 @@ dist-ssr
 *.sw?
 
 # CI 生成的资源（Node.js 运行时 + sidecar bundle）
-src-tauri/resources/
+src-tauri/resources/node-runtime/
+src-tauri/resources/sidecar/
