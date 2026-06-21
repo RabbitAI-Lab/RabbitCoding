@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import { useResizable } from '../../hooks/useResizable';
 import { useI18n } from '../../i18n/useI18n';
-import { titleBarPadding } from '../../utils/platform';
+import { titleBarPadding, isWindowsArm64 } from '../../utils/platform';
 import GeneralPanel from './GeneralPanel';
 import ModelsPanel from './ModelsPanel';
 import AgentsPanel from './agents/AgentsPanel';
@@ -76,7 +76,8 @@ const NAV_GROUPS: NavGroup[] = [
       { key: 'integration', labelKey: 'settings.nav.integration', icon: FlaskConical },
       { key: 'networkDiagnostics', labelKey: 'settings.nav.networkDiagnostics', icon: Wifi },
       { key: 'advanced', labelKey: 'settings.nav.advanced', icon: Wrench },
-      { key: 'voice', labelKey: 'settings.nav.voice', icon: Mic },
+      // Windows ARM64 不支持语音识别，隐藏设置入口
+      ...(!isWindowsArm64 ? [{ key: 'voice' as const, labelKey: 'settings.nav.voice', icon: Mic }] : []),
       { key: 'feedback', labelKey: 'settings.nav.feedback', icon: MessageCircleQuestion },
     ],
     dividerAfter: false,
