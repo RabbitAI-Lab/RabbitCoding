@@ -16,7 +16,8 @@ import {
 } from 'lucide-react';
 import { useResizable } from '../../hooks/useResizable';
 import { useI18n } from '../../i18n/useI18n';
-import { titleBarPadding, isWindowsArm64 } from '../../utils/platform';
+import { titleBarPadding } from '../../utils/platform';
+import { isVoiceSupportedSync, checkVoiceSupported } from '../../hooks/useVoiceSupported';
 import GeneralPanel from './GeneralPanel';
 import ModelsPanel from './ModelsPanel';
 import AgentsPanel from './agents/AgentsPanel';
@@ -76,8 +77,7 @@ const NAV_GROUPS: NavGroup[] = [
       { key: 'integration', labelKey: 'settings.nav.integration', icon: FlaskConical },
       { key: 'networkDiagnostics', labelKey: 'settings.nav.networkDiagnostics', icon: Wifi },
       { key: 'advanced', labelKey: 'settings.nav.advanced', icon: Wrench },
-      // Windows ARM64 不支持语音识别，隐藏设置入口
-      ...(!isWindowsArm64 ? [{ key: 'voice' as const, labelKey: 'settings.nav.voice', icon: Mic }] : []),
+      { key: 'voice', labelKey: 'settings.nav.voice', icon: Mic },
       { key: 'feedback', labelKey: 'settings.nav.feedback', icon: MessageCircleQuestion },
     ],
     dividerAfter: false,
@@ -96,6 +96,16 @@ export default function SettingsPage({ onBack, initialSection, workspaces }: Set
   const { t } = useI18n();
   const [section, setSection] = useState<SettingsSection>(initialSection ?? 'general');
   const [fullWidth, setFullWidth] = useState(false);
+  const [voiceSupported, setVoiceSupported] = useState(isVoiceSupportedSync());
+
+  // 查询后端编译期判定：不支持的平台过滤掉语音设置项
+  useEffect(() => { checkVoiceSupported().then(setVoiceSupported); }, []);
+
+  // 根据平台能力过滤导航分组
+  const navGroups = NAV_GROUPS.map(group => ({
+    ...group,
+    items: voiceSupported ? group.items : group.items.filter(item => item.key !== 'voice'),
+  }));
 
   // section 切换时重置全宽模式
   useEffect(() => { setFullWidth(false); }, [section]);
@@ -171,7 +181,7 @@ export default function SettingsPage({ onBack, initialSection, workspaces }: Set
           </button>
 
           {/* 分组导航菜单 */}
-          {NAV_GROUPS.map((group, gi) => (
+          {navGroups.map((group, gi) => (
             <div key={gi}>
               {group.items.map(item => {
                 const active = section === item.key;

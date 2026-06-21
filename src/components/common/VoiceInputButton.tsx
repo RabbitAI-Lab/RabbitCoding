@@ -11,7 +11,7 @@ import Tooltip from './Tooltip';
 import Modal from './Modal';
 import { useVoiceInput, type DownloadProgress } from '../../hooks/useVoiceInput';
 import { useI18n } from '../../i18n/useI18n';
-import { isWindowsArm64 } from '../../utils/platform';
+import { isVoiceSupportedSync, checkVoiceSupported } from '../../hooks/useVoiceSupported';
 
 interface VoiceInputButtonProps {
   /** 收到识别文本时回填输入框（text 为包含已有内容的完整文本） */
@@ -21,10 +21,14 @@ interface VoiceInputButtonProps {
 }
 
 export default function VoiceInputButton({ onText, currentText }: VoiceInputButtonProps) {
-  // Windows ARM64 不支持 sherpa-onnx，隐藏语音按钮（在所有 hooks 之前 return）
-  if (isWindowsArm64) return null;
-
   const { t } = useI18n();
+  const [voiceSupported, setVoiceSupported] = useState(isVoiceSupportedSync());
+
+  // 查询后端编译期判定：不支持的平台隐藏按钮
+  useEffect(() => {
+    checkVoiceSupported().then(setVoiceSupported);
+  }, []);
+  if (!voiceSupported) return null;
   const [showDownloadModal, setShowDownloadModal] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState<DownloadProgress | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);

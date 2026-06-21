@@ -419,6 +419,13 @@ fn download_file_blocking(
     Ok(downloaded)
 }
 
+/// 当前平台是否支持语音识别（编译期判定）
+/// Windows ARM64 无 sherpa-onnx 预编译库
+#[command]
+pub fn voice_supported() -> bool {
+    cfg!(not(all(target_os = "windows", target_arch = "aarch64")))
+}
+
 /// 查询 ASR 状态
 #[command]
 pub fn asr_status(app: AppHandle, state: State<'_, VoiceState>) -> AsrStatus {

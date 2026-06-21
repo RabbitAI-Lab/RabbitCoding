@@ -888,6 +888,7 @@ pub fn run() {
             wiki::list_codewiki_tree,
             wiki::list_codewiki_catalogs,
             wiki::wiki_check_pending,
+            voice::voice_supported,
             voice::asr_status,
             voice::asr_ensure_model,
             voice::asr_start,
