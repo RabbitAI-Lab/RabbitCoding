@@ -12,6 +12,15 @@ export const isWindows =
   /Win/.test(navigator.platform);
 
 /**
+ * Windows ARM64 检测（sherpa-onnx 不支持该平台，语音功能不可用）
+ * Windows on ARM 的 UA 字符串包含 "ARM" 或 "Windows NT ... ARM"
+ */
+export const isWindowsArm64 =
+  typeof navigator !== 'undefined' &&
+  isWindows &&
+  /ARM/i.test(navigator.userAgent);
+
+/**
  * macOS 交通灯区域预留宽度（Overlay 标题栏样式）
  * Windows / Linux 不需要此 padding
  */
