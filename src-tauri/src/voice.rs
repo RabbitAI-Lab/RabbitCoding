@@ -610,6 +610,7 @@ pub fn asr_ensure_model(app: AppHandle) -> Result<(), String> {
 }
 
 /// 后台音频处理线程：VAD 分段 + 离线识别
+#[cfg(not(all(target_os = "windows", target_arch = "aarch64")))]
 fn audio_processing_thread(
     app: AppHandle,
     receiver: Receiver<AudioMessage>,
@@ -819,6 +820,26 @@ fn audio_processing_thread(
     }
 
     println!("[voice] Processing thread exited");
+}
+
+/// Windows ARM64 stub：sherpa-onnx 不提供该平台预编译库
+#[cfg(all(target_os = "windows", target_arch = "aarch64"))]
+fn audio_processing_thread(
+    app: AppHandle,
+    receiver: Receiver<AudioMessage>,
+    _model_dir: PathBuf,
+    _model_def: &'static ModelDef,
+) {
+    eprintln!("[voice] Voice recognition is not supported on this platform (Windows ARM64)");
+    let _ = app.emit("asr://error", serde_json::json!({
+        "error": "Voice recognition is not supported on Windows ARM64"
+    }));
+    // Drain messages until Stop
+    while let Ok(msg) = receiver.recv() {
+        if matches!(msg, AudioMessage::Stop) {
+            break;
+        }
+    }
 }
 
 /// 开始语音识别会话
