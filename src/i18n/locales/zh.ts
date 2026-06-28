@@ -242,6 +242,18 @@ const zh = {
   modelSelector: {
     selectModel: '选择模型',
     pleaseConfigure: '请配置模型',
+    latestModels: '最新模型',
+    customModels: '自定义模型',
+    onlineTag: '在线',
+    loadingModels: '加载中…',
+    noOnlineModels: '暂无可用线上模型',
+    loginRequiredTitle: '需要登录',
+    loginRequiredDesc: '使用线上模型需要先登录账号，登录后可自动获取访问凭证。',
+    login: '去登录',
+    getKeyFailedTitle: '获取凭证失败',
+    getKeyFailedDesc: '无法获取线上模型的访问凭证，请稍后重试或重新登录。',
+    retry: '重试',
+    cancel: '取消',
   },
   addRepoModal: {
     title: '添加代码库',
@@ -417,6 +429,7 @@ const zh = {
       columnBaseUrl: 'Base URL',
       apiKeyMasked: '已配置',
       provider: {
+        anthropic: 'Anthropic',
         glm: '智谱 GLM',
         minimax: 'MiniMax',
         aliyun: '阿里云通义千问',

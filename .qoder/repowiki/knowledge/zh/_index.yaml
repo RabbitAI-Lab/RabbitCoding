@@ -3,7 +3,7 @@ schema_version: 1
 locale: zh-CN
 branch: main
 nodes_managed: true
-exported_at: "2026-06-21T21:46:59Z"
+exported_at: "2026-06-21T22:46:32Z"
 modules:
     "":
         dir_name: RabbitCoding AI 编程助手
@@ -14,6 +14,20 @@ modules:
             - frontend
             - sidecar
             - tauri_backend
+        depends_on: []
+        related_to: []
+    build_system:
+        dir_name: Tauri v2 桌面应用构建与 CI_CD 流水线
+        title: Tauri v2 桌面应用构建与 CI/CD 流水线
+        scope: []
+        source_files:
+            - .github/workflows/build.yml
+            - src-tauri/tauri.conf.json
+            - package.json
+            - sidecar/package.json
+            - sidecar/scripts/setup-resources.mjs
+            - src-tauri/Cargo.toml
+        children: []
         depends_on: []
         related_to: []
     configuration_system:
@@ -47,15 +61,15 @@ modules:
         depends_on: []
         related_to: []
     error_handling:
-        dir_name: 错误处理策略：ResultString 与 JSON-lines 事件流
-        title: 错误处理策略：Result<String> 与 JSON-lines 事件流
+        dir_name: 错误处理与异常传播机制
+        title: 错误处理与异常传播机制
         scope: []
         source_files:
             - src-tauri/src/lib.rs
-            - src-tauri/src/auth.rs
             - src-tauri/src/db.rs
+            - src-tauri/src/sidecar.rs
+            - src-tauri/src/network.rs
             - sidecar/src/agent.ts
-            - sidecar/src/index.ts
             - src/utils/notify.ts
         children: []
         depends_on: []
@@ -66,6 +80,21 @@ modules:
         scope:
             - src/
         source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: sidecar
+            - path: tauri_backend
+    frontend_style:
+        dir_name: 前端视觉风格与主题系统
+        title: 前端视觉风格与主题系统
+        scope: []
+        source_files:
+            - src/index.css
+            - src/App.tsx
+            - src/hooks/useTheme.tsx
+            - package.json
+            - src/components/sidebar/Sidebar.tsx
         children: []
         depends_on: []
         related_to: []
@@ -92,13 +121,17 @@ modules:
         source_files: []
         children: []
         depends_on: []
-        related_to: []
+        related_to:
+            - path: frontend
+            - path: tauri_backend
     tauri_backend:
-        dir_name: Rabbit Coding Tauri 后端核心
-        title: Rabbit Coding Tauri 后端核心
+        dir_name: Tauri v2 桌面应用后端核心
+        title: Tauri v2 桌面应用后端核心
         scope:
             - src-tauri/
         source_files: []
         children: []
         depends_on: []
-        related_to: []
+        related_to:
+            - path: frontend
+            - path: sidecar

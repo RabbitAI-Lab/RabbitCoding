@@ -229,6 +229,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoginError(null);
     localStorage.removeItem(PKCE_VERIFIER_KEY);
     localStorage.removeItem(PKCE_STATE_KEY);
+    // 清除缓存的 AI 转发 Key，避免跨账号串用
+    localStorage.removeItem('ai-forwarding-key');
+    localStorage.removeItem('ai-forwarding-key-prefix');
   }, [setUser]);
 
   return (

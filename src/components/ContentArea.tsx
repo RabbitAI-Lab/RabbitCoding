@@ -21,6 +21,9 @@ import type { AgentQueryOptions, AgentMessage, UserMessage, ModelConfig, ProxyCo
 import { invoke } from '@tauri-apps/api/core';
 import { useI18n } from '../i18n/useI18n';
 import { useTheme } from '../hooks/useTheme';
+import { useAuth } from '../hooks/useAuth';
+import { useOnlineModels } from '../hooks/useOnlineModels';
+import { isOnlineModelId, buildOnlineModelConfig, extractModelIdFromOnline, NOT_AUTHENTICATED } from '../utils/portalClient';
 import { proxyConfigToEnvVars, proxyConfigFingerprint, DEFAULT_PROXY_CONFIG } from '../utils/proxy';
 import { generateSpec, generateSpecFileName, extractSpecSummary } from '../utils/specGenerator';
 
@@ -55,6 +58,10 @@ export default function ContentArea({ store, onOpenSettings }: ContentAreaProps)
   const [rightPanelMaximized, setRightPanelMaximized] = useState(false);
   const [apiKeyModalOpen, setApiKeyModalOpen] = useState(false);
     const [noModelOpen, setNoModelOpen] = useState(false);
+    // 线上模型登录引导弹窗
+    const [loginGuideOpen, setLoginGuideOpen] = useState(false);
+    // 获取 AI 转发 Key 失败提示
+    const [getKeyErrorOpen, setGetKeyErrorOpen] = useState(false);
   // 存储当前待发送的查询，sidecar 就绪后自动发送
   const pendingQueryRef = useRef<(() => void) | null>(null);
 
@@ -76,10 +83,21 @@ export default function ContentArea({ store, onOpenSettings }: ContentAreaProps)
     return () => document.removeEventListener('compositionend', handleCompositionEnd, true);
   }, []);
   const [apiKey, setApiKey] = useLocalStorage<string>('anthropic-api-key', '');
+  // 线上模型与 AI 转发 Key
+  const auth = useAuth();
+  const {
+    onlineModels,
+    loading: onlineModelsLoading,
+    aiForwardingKey,
+    ensureAiForwardingKey,
+    refreshModels: refreshOnlineModels,
+  } = useOnlineModels();
   // 网络代理配置
   const [proxyConfig] = useLocalStorage<ProxyConfig>('proxy-config', DEFAULT_PROXY_CONFIG);
   // 记录 sidecar 启动时使用的代理指纹，用于检测变更触发重启
   const [appliedProxyFingerprint, setAppliedProxyFingerprint] = useLocalStorage<string>('proxy-applied-fingerprint', '');
+  // 记录 sidecar 启动时使用的模型配置指纹（baseUrl + apiKey 前缀），用于检测模型切换触发重启
+  const [appliedModelFingerprint, setAppliedModelFingerprint] = useLocalStorage<string>('applied-model-fingerprint', '');
   const { width: rightPanelWidth, isResizing: isPanelResizing, handleProps: panelHandleProps } = useResizable({
     storageKey: 'right-panel-width',
     defaultWidth: 400,
@@ -102,7 +120,13 @@ Knowledge base reference:
 The workspace Code Wiki is enabled at ${codeWikiDir}. When useful for the task, search and read files in that directory with the available filesystem tools before answering or editing code. Treat those files as project context and cite paths when relying on them.`;
   }, [knowledgeBaseConfigs, selectedWorkspace?.id, selectedWorkspace?.path]);
 
-  // 派生：模型选择器选项（仅 enabled 的模型）
+  // 派生：线上模型选项（最新模型 Tab）
+  const onlineModelOptions: ModelOption[] = useMemo(
+    () => onlineModels.map(m => ({ id: `__online__:${m.id}`, label: m.displayName || m.id })),
+    [onlineModels]
+  );
+
+  // 派生：自定义模型选项（仅 enabled 的模型）
   const modelOptions: ModelOption[] = useMemo(
     () => modelConfigs
       .filter(c => c.enabled)
@@ -110,18 +134,58 @@ The workspace Code Wiki is enabled at ${codeWikiDir}. When useful for the task, 
     [modelConfigs]
   );
 
-  // 当前选中的模型配置对象
-  const selectedModelConfig = modelConfigs.find(c => c.id === selectedModelConfigId);
+  // 当前选中的模型配置对象（自定义模型 或 线上虚拟模型）
+  const selectedModelConfig = useMemo(() => {
+    if (isOnlineModelId(selectedModelConfigId)) {
+      // 线上虚拟模型：从 onlineModels 找到对应 model，构造虚拟配置
+      const modelId = extractModelIdFromOnline(selectedModelConfigId);
+      const model = onlineModels.find(m => m.id === modelId);
+      if (model) {
+        return buildOnlineModelConfig(model, aiForwardingKey);
+      }
+      return undefined;
+    }
+    return modelConfigs.find(c => c.id === selectedModelConfigId);
+  }, [selectedModelConfigId, onlineModels, aiForwardingKey, modelConfigs]);
 
   // 传给 Agent SDK 的 model 字符串
   const effectiveModel = selectedModelConfig?.modelId ?? '';
 
   // selectedModelConfigId 失效回退（删除模型后自动选第一个）
+  // 仅当自定义模型与线上模型均无选中时回退到第一个自定义模型
   useEffect(() => {
-    if (!selectedModelConfig && modelOptions.length > 0) {
+    if (!selectedModelConfig && modelOptions.length > 0 && !isOnlineModelId(selectedModelConfigId)) {
       setSelectedModelConfigId(modelOptions[0].id);
     }
-  }, [selectedModelConfig, modelOptions, setSelectedModelConfigId]);
+  }, [selectedModelConfig, modelOptions, selectedModelConfigId, setSelectedModelConfigId]);
+
+  // 是否选中了线上模型
+  const isOnlineSelected = isOnlineModelId(selectedModelConfigId);
+
+  // 登录后自动获取 AI 转发 Key（并消费 pending query）
+  useEffect(() => {
+    if (auth.user?.accessToken && isOnlineSelected && !aiForwardingKey) {
+      ensureAiForwardingKey()
+        .then(() => {
+          console.debug('[ContentArea] AI forwarding key acquired after login');
+          // 若有 pending query 则执行
+          const pending = pendingQueryRef.current;
+          if (pending) {
+            pendingQueryRef.current = null;
+            pending();
+          }
+        })
+        .catch(err => {
+          console.error('[ContentArea] ensureAiForwardingKey after login failed:', err);
+          // 401 = Casdoor token 过期 → 弹重新登录引导；其他错误 → 弹获取凭证失败
+          if ((err as Error & { code?: string }).code === NOT_AUTHENTICATED) {
+            setLoginGuideOpen(true);
+          } else {
+            setGetKeyErrorOpen(true);
+          }
+        });
+    }
+  }, [auth.user, isOnlineSelected, aiForwardingKey, ensureAiForwardingKey]);
 
   // 从全局 AgentProvider 获取 agent API（listener 在 App 层级，页面切换不丢失）
   const agent = useAgentContext();
@@ -159,6 +223,35 @@ The workspace Code Wiki is enabled at ${codeWikiDir}. When useful for the task, 
   }, []);
 
   /**
+   * 选中模型：自定义模型直接设置；线上模型选中时自动获取 AI 转发 Key
+   */
+  const handleSelectModel = useCallback((id: string) => {
+    setSelectedModelConfigId(id);
+    // 选中的是线上模型 → 确保已有 AI 转发 Key
+    if (isOnlineModelId(id)) {
+      if (!aiForwardingKey) {
+        if (auth.user?.accessToken) {
+          // 已登录但未缓存 Key → 用 Casdoor accessToken 换取
+          ensureAiForwardingKey().catch(err => {
+            console.error('[ContentArea] ensureAiForwardingKey on select failed:', err);
+            // 401 = Casdoor token 过期 → 弹重新登录引导；其他错误 → 弹获取凭证失败
+            if ((err as Error & { code?: string }).code === NOT_AUTHENTICATED) {
+              setLoginGuideOpen(true);
+            } else {
+              setGetKeyErrorOpen(true);
+            }
+          });
+        } else {
+          // 未登录 → 弹出登录引导
+          setLoginGuideOpen(true);
+        }
+      }
+      // 刷新线上模型列表，确保选中项有效
+      void refreshOnlineModels(true);
+    }
+  }, [setSelectedModelConfigId, aiForwardingKey, auth.user, ensureAiForwardingKey, refreshOnlineModels]);
+
+  /**
    * 确保 sidecar 正在运行，然后执行查询
    * 优先使用模型配置中的 API Key 和环境变量；向后兼容旧 apiKey
    */
@@ -184,7 +277,34 @@ The workspace Code Wiki is enabled at ${codeWikiDir}. When useful for the task, 
     // 2. 检查 API Key
     if (!effectiveApiKey) {
       pendingQueryRef.current = queryFn;
-      setApiKeyModalOpen(true);
+      // 线上模型无 key → 弹出登录引导（而非旧版 ApiKeyModal）
+      if (isOnlineModelId(selectedModelConfigId)) {
+        if (auth.user?.accessToken) {
+          // 已登录 → 尝试获取 AI 转发 Key
+          ensureAiForwardingKey()
+            .then(() => {
+              const pending = pendingQueryRef.current;
+              if (pending) {
+                pendingQueryRef.current = null;
+                pending();
+              }
+            })
+            .catch(err => {
+              console.error('[ContentArea] ensureAiForwardingKey in guard failed:', err);
+              // 401 = Casdoor token 过期 → 弹重新登录引导；其他错误 → 弹获取凭证失败
+              if ((err as Error & { code?: string }).code === NOT_AUTHENTICATED) {
+                setLoginGuideOpen(true);
+              } else {
+                setGetKeyErrorOpen(true);
+              }
+            });
+        } else {
+          // 未登录 → 弹出登录引导
+          setLoginGuideOpen(true);
+        }
+      } else {
+        setApiKeyModalOpen(true);
+      }
       return;
     }
 
@@ -193,19 +313,24 @@ The workspace Code Wiki is enabled at ${codeWikiDir}. When useful for the task, 
     effectiveEnvVars = { ...proxyEnvVars, ...effectiveEnvVars };
 
     const currentProxyFingerprint = proxyConfigFingerprint(proxyConfig);
+    // 模型配置指纹：baseUrl + apiKey 前缀（不含完整 key，安全存储）
+    const currentModelFingerprint = `${effectiveBaseUrl ?? ''}::${effectiveApiKey.slice(0, 12)}`;
 
     // 4. 如果 sidecar 已在运行
     if (agent.sidecarStatus === 'running') {
-      // 检测代理配置是否发生变化
-      if (appliedProxyFingerprint && appliedProxyFingerprint !== currentProxyFingerprint) {
-        // 代理配置已变更，需要重启 sidecar
+      // 检测代理配置或模型配置是否发生变化
+      const proxyChanged = appliedProxyFingerprint && appliedProxyFingerprint !== currentProxyFingerprint;
+      const modelChanged = appliedModelFingerprint && appliedModelFingerprint !== currentModelFingerprint;
+      if (proxyChanged || modelChanged) {
+        // 配置已变更，需要重启 sidecar
+        console.debug('[ContentArea] Restarting sidecar due to config change:', { proxyChanged, modelChanged });
         try {
           await agent.stopSidecar();
         } catch (err) {
-          console.error('[ContentArea] Failed to stop sidecar for proxy change:', err);
+          console.error('[ContentArea] Failed to stop sidecar for config change:', err);
         }
       } else {
-        // 代理未变化，直接执行查询
+        // 配置未变化，直接执行查询
         queryFn();
         return;
       }
@@ -218,8 +343,9 @@ The workspace Code Wiki is enabled at ${codeWikiDir}. When useful for the task, 
         baseUrl: effectiveBaseUrl,
         envVars: effectiveEnvVars,
       });
-      // 记录当前代理指纹
+      // 记录当前代理指纹和模型配置指纹
       setAppliedProxyFingerprint(currentProxyFingerprint);
+      setAppliedModelFingerprint(currentModelFingerprint);
       // sidecar 就绪，执行查询
       queryFn();
     } catch (err) {
@@ -234,7 +360,7 @@ The workspace Code Wiki is enabled at ${codeWikiDir}. When useful for the task, 
         });
       }
     }
-  }, [apiKey, selectedModelConfig, agent, selectedWorkspace, store, t, proxyConfig, appliedProxyFingerprint, setAppliedProxyFingerprint]);
+  }, [apiKey, selectedModelConfig, agent, selectedWorkspace, store, t, proxyConfig, appliedProxyFingerprint, setAppliedProxyFingerprint, appliedModelFingerprint, setAppliedModelFingerprint, selectedModelConfigId, auth.user, ensureAiForwardingKey]);
 
   /** API Key 弹窗关闭后，如果有 pending query 则执行 */
   const handleApiKeyModalClose = useCallback(() => {
@@ -253,14 +379,16 @@ The workspace Code Wiki is enabled at ${codeWikiDir}. When useful for the task, 
     if (pending) {
       pendingQueryRef.current = null;
       try {
-        await agent.startSidecar({ apiKey: key, envVars: proxyConfigToEnvVars(proxyConfig) });
+        const baseUrl = selectedModelConfig?.baseUrl;
+        await agent.startSidecar({ apiKey: key, baseUrl, envVars: proxyConfigToEnvVars(proxyConfig) });
         setAppliedProxyFingerprint(proxyConfigFingerprint(proxyConfig));
+        setAppliedModelFingerprint(`${baseUrl ?? ''}::${key.slice(0, 12)}`);
         pending();
       } catch (err) {
         console.error('[ContentArea] Failed to start sidecar after API key save:', err);
       }
     }
-  }, [setApiKey, agent, proxyConfig]);
+  }, [setApiKey, agent, proxyConfig, selectedModelConfig, setAppliedProxyFingerprint, setAppliedModelFingerprint]);
 
   /** 存储等待 Spec 确认的编码查询参数 */
   const pendingCodingQueryRef = useRef<Map<string, { prompt: string; cwd: string; model: string; specSessionId?: string }>>(new Map());
@@ -576,7 +704,7 @@ The workspace Code Wiki is enabled at ${codeWikiDir}. When useful for the task, 
     return (
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-0">
-          <ModelSelector value={selectedModelConfigId} options={modelOptions} onChange={setSelectedModelConfigId} onConfigure={() => onOpenSettings?.('models')} />
+          <ModelSelector value={selectedModelConfigId} options={modelOptions} onChange={handleSelectModel} onConfigure={() => onOpenSettings?.('models')} onlineModels={onlineModelOptions} onlineLoading={onlineModelsLoading} />
           <div className="h-3 w-px bg-gray-200 dark:bg-gray-600 mx-1.5" />
           <Sender.Switch
             value={specEnabled}
@@ -637,7 +765,7 @@ The workspace Code Wiki is enabled at ${codeWikiDir}. When useful for the task, 
         </div>
       </div>
     );
-  }, [selectedModelConfigId, modelOptions, specEnabled, selectedRabbit, selectedModelConfig, optimize.state.status, isDark, sendBtnColor, handleCompact, handleOptimizePrompt, handleVoiceText, onOpenSettings, t]);
+  }, [selectedModelConfigId, modelOptions, specEnabled, selectedRabbit, selectedModelConfig, optimize.state.status, isDark, sendBtnColor, handleCompact, handleOptimizePrompt, handleVoiceText, onOpenSettings, t, handleSelectModel, onlineModelOptions, onlineModelsLoading]);
 
   /** 清理 worktree 镜像 */
   const handleClearWorktree = useCallback(async () => {
@@ -769,7 +897,7 @@ The workspace Code Wiki is enabled at ${codeWikiDir}. When useful for the task, 
                   footer={(_, { components: { SendButton } }) => (
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-0">
-                        <ModelSelector value={selectedModelConfigId} options={modelOptions} onChange={setSelectedModelConfigId} onConfigure={() => onOpenSettings?.('models')} />
+                        <ModelSelector value={selectedModelConfigId} options={modelOptions} onChange={handleSelectModel} onConfigure={() => onOpenSettings?.('models')} onlineModels={onlineModelOptions} onlineLoading={onlineModelsLoading} />
                         <div className="h-3 w-px bg-gray-200 dark:bg-gray-600 mx-1.5" />
                         <Sender.Switch
                           value={specEnabled}
@@ -904,6 +1032,79 @@ The workspace Code Wiki is enabled at ${codeWikiDir}. When useful for the task, 
               className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm text-white hover:bg-blue-700 dark:hover:bg-blue-500 transition-colors"
             >
               {t('noModelModal.goConfig')}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* 线上模型登录引导弹窗 */}
+      <Modal open={loginGuideOpen} onClose={() => setLoginGuideOpen(false)} title={t('modelSelector.loginRequiredTitle')} widthClassName="w-[400px]">
+        <div className="flex flex-col gap-4">
+          <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed">
+            {t('modelSelector.loginRequiredDesc')}
+          </p>
+          <div className="flex justify-end gap-2">
+            <button
+              onClick={() => setLoginGuideOpen(false)}
+              className="rounded-lg px-3 py-1.5 text-sm text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800 transition-colors"
+            >
+              {t('modelSelector.cancel')}
+            </button>
+            <button
+              onClick={() => {
+                setLoginGuideOpen(false);
+                auth.login();
+              }}
+              className="rounded-lg bg-[var(--brand-solid)] px-3 py-1.5 text-sm text-white hover:opacity-90 transition-opacity"
+            >
+              {t('modelSelector.login')}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* 获取 AI 转发 Key 失败弹窗 */}
+      <Modal open={getKeyErrorOpen} onClose={() => setGetKeyErrorOpen(false)} title={t('modelSelector.getKeyFailedTitle')} widthClassName="w-[400px]">
+        <div className="flex flex-col gap-4">
+          <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed">
+            {t('modelSelector.getKeyFailedDesc')}
+          </p>
+          <div className="flex justify-end gap-2">
+            <button
+              onClick={() => setGetKeyErrorOpen(false)}
+              className="rounded-lg px-3 py-1.5 text-sm text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800 transition-colors"
+            >
+              {t('modelSelector.cancel')}
+            </button>
+            <button
+              onClick={() => {
+                setGetKeyErrorOpen(false);
+                if (auth.user?.accessToken) {
+                  ensureAiForwardingKey()
+                    .then(() => {
+                      // 成功后若有 pending query 则执行
+                      const pending = pendingQueryRef.current;
+                      if (pending) {
+                        pendingQueryRef.current = null;
+                        pending();
+                      }
+                    })
+                    .catch(err => {
+                      console.error('[ContentArea] retry ensureAiForwardingKey failed:', err);
+                      // 401 → 弹登录引导；其他 → 重新弹凭证失败
+                      if ((err as Error & { code?: string }).code === NOT_AUTHENTICATED) {
+                        setLoginGuideOpen(true);
+                      } else {
+                        setGetKeyErrorOpen(true);
+                      }
+                    });
+                } else {
+                  auth.login();
+                }
+              }}
+              className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm text-white hover:bg-blue-700 dark:hover:bg-blue-500 transition-colors"
+            >
+              {t('modelSelector.retry')}
             </button>
           </div>
         </div>

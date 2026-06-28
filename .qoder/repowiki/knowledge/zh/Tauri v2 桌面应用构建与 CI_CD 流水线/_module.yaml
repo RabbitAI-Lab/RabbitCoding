@@ -1,0 +1,13 @@
+schema_version: 1
+module_path: build_system
+title: Tauri v2 桌面应用构建与 CI/CD 流水线
+scope: []
+source_files:
+    - .github/workflows/build.yml
+    - src-tauri/tauri.conf.json
+    - package.json
+    - sidecar/package.json
+    - sidecar/scripts/setup-resources.mjs
+    - src-tauri/Cargo.toml
+depends_on: []
+related_to: []

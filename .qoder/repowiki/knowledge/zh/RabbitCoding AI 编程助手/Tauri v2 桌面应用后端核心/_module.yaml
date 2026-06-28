@@ -1,8 +1,10 @@
 schema_version: 1
 module_path: tauri_backend
-title: Rabbit Coding Tauri 后端核心
+title: Tauri v2 桌面应用后端核心
 scope:
     - src-tauri/
 source_files: []
 depends_on: []
-related_to: []
+related_to:
+    - path: frontend
+    - path: sidecar

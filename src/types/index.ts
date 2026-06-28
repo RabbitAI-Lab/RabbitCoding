@@ -384,7 +384,7 @@ export interface TaskTodoItem {
 // ============================================================
 
 /** 模型厂商类型 */
-export type ModelProvider = 'glm' | 'minimax' | 'aliyun' | 'kimi' | 'deepseek' | 'custom';
+export type ModelProvider = 'anthropic' | 'glm' | 'minimax' | 'aliyun' | 'kimi' | 'deepseek' | 'custom';
 
 /** 单个模型配置（存储在 localStorage 'model-configs' 键） */
 export interface ModelConfig {

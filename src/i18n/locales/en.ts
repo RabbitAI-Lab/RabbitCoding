@@ -242,6 +242,18 @@ const en = {
   modelSelector: {
     selectModel: 'Select Model',
     pleaseConfigure: 'Please configure',
+    latestModels: 'Latest',
+    customModels: 'Custom',
+    onlineTag: 'Online',
+    loadingModels: 'Loading…',
+    noOnlineModels: 'No online models available',
+    loginRequiredTitle: 'Login Required',
+    loginRequiredDesc: 'You need to log in to use online models. Login will automatically obtain access credentials.',
+    login: 'Log In',
+    getKeyFailedTitle: 'Failed to Get Credentials',
+    getKeyFailedDesc: 'Unable to obtain access credentials for online models. Please try again or re-login.',
+    retry: 'Retry',
+    cancel: 'Cancel',
   },
   addRepoModal: {
     title: 'Add Repository',
@@ -417,6 +429,7 @@ const en = {
       columnBaseUrl: 'Base URL',
       apiKeyMasked: 'Configured',
       provider: {
+        anthropic: 'Anthropic',
         glm: 'Zhipu GLM',
         minimax: 'MiniMax',
         aliyun: 'Alibaba Qwen',
