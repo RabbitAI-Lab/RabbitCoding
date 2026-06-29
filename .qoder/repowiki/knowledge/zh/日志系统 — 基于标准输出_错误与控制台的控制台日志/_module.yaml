@@ -1,0 +1,13 @@
+schema_version: 1
+module_path: logging_system
+title: 日志系统 — 基于标准输出/错误与控制台的控制台日志
+scope: []
+source_files:
+    - src-tauri/src/lib.rs
+    - src-tauri/src/auth.rs
+    - src-tauri/src/integration.rs
+    - sidecar/src/index.ts
+    - sidecar/src/agent.ts
+    - src/utils/notify.ts
+depends_on: []
+related_to: []

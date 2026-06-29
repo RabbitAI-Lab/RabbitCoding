@@ -660,7 +660,14 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_pty::init())
-        .plugin(tauri_plugin_window_state::Builder::default().build())
+        .plugin(
+            // 桌宠窗口为固定尺寸装饰浮窗（resizable:false），不参与 window-state 的尺寸/位置持久化。
+            // 规避 Windows 非 100% DPI 下透明无装饰窗口的保存↔恢复 DPI 转换累积误差（上游 issue #251），
+            // 该误差会导致 pet 窗口每次启动缩小一点。
+            tauri_plugin_window_state::Builder::default()
+                .with_denylist(&["pet"])
+                .build(),
+        )
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_updater::Builder::new().build())

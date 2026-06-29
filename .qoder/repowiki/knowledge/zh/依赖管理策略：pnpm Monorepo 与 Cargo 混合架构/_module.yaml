@@ -1,0 +1,13 @@
+schema_version: 1
+module_path: dependency_management
+title: 依赖管理策略：pnpm Monorepo 与 Cargo 混合架构
+scope: []
+source_files:
+    - package.json
+    - pnpm-lock.yaml
+    - pnpm-workspace.yaml
+    - sidecar/package.json
+    - src-tauri/Cargo.toml
+    - src-tauri/Cargo.lock
+depends_on: []
+related_to: []

@@ -550,6 +550,14 @@ const en = {
       },
     },
     advanced: {
+      portal: {
+        title: 'Portal Environment (Debug)',
+        description: 'Switch the backend address for the model list and AI forwarding service, for local debugging',
+        local: 'Local Debug Mode',
+        localDesc: 'When enabled, requests target the local Portal backend. Start it on port 5173 first.',
+        localNotice: 'Local debug mode is on: ensure the local Portal backend is running on port 5173 and added to the CORS whitelist (including http://localhost:1420)',
+        currentOrigin: 'Active Endpoint',
+      },
       proxy: {
         title: 'Network Proxy',
         description: 'Configure HTTP/HTTPS/SOCKS proxy for Agent network requests',

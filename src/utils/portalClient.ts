@@ -13,12 +13,49 @@
 import type { ModelConfig } from '../types';
 
 // ============================================================
-// Portal origin
+// Portal origin（默认生产，可在高级设置手动切换到本地调试）
 // ============================================================
 
-/** dev 用本地 Portal，prod 用线上 */
+/** 生产环境 Portal origin */
+export const PROD_ORIGIN = 'https://coding.rabbitai-lab.com';
+/** 本地调试 Portal origin（需在 5173 端口启动本地 Portal 后端） */
+export const LOCAL_ORIGIN = 'http://localhost:5173';
+
+/** Portal 环境类型 */
+export type PortalEnv = 'prod' | 'local';
+
+/** localStorage key */
+const PORTAL_ENV_KEY = 'portal-env';
+
+/** origin 切换事件名 */
+export const PORTAL_ENV_CHANGE_EVENT = 'portal-env-change';
+
+/**
+ * 读取当前 Portal 环境（默认 prod）。
+ * 非法值统一回退为 prod。
+ */
+export function getPortalEnv(): PortalEnv {
+  try {
+    const v = localStorage.getItem(PORTAL_ENV_KEY);
+    return v === 'local' ? 'local' : 'prod';
+  } catch {
+    return 'prod';
+  }
+}
+
+/** 设置 Portal 环境并派发事件，下游（useOnlineModels 等）可监听后刷新缓存 */
+export function setPortalEnv(mode: PortalEnv): void {
+  try {
+    localStorage.setItem(PORTAL_ENV_KEY, mode);
+  } catch {
+    // ignore storage errors
+  }
+  window.dispatchEvent(new Event(PORTAL_ENV_CHANGE_EVENT));
+}
+
+/** 当前生效的 Portal origin（生产或本地，取决于 getPortalEnv） */
 export function getPortalOrigin(): string {
-  return import.meta.env.DEV ? 'http://localhost:5173' : 'https://coding.rabbitai-lab.com';
+  return getPortalEnv() === 'local' ? LOCAL_ORIGIN : PROD_ORIGIN;
 }
 
 /** anthropic 转发 baseUrl：sidecar 传给 Anthropic SDK 的 base_url */

@@ -405,7 +405,7 @@ The workspace Code Wiki is enabled at ${codeWikiDir}. When useful for the task, 
       model: params.model,
       allowedTools: ['Read', 'Edit', 'Bash', 'Glob', 'Grep', 'Write', 'TodoWrite', 'TaskCreate', 'TaskUpdate', 'TaskGet', 'TaskList'],
       permissionMode: 'acceptEdits',
-      maxTurns: 30,
+      maxTurns: 500,
     };
 
     ensureSidecarAndQuery(() => {
@@ -534,7 +534,7 @@ The workspace Code Wiki is enabled at ${codeWikiDir}. When useful for the task, 
           model,
           allowedTools: ['Read', 'Edit', 'Bash', 'Glob', 'Grep', 'Write', 'TodoWrite', 'TaskCreate', 'TaskUpdate', 'TaskGet', 'TaskList'],
           permissionMode: 'acceptEdits',
-          maxTurns: 30,
+          maxTurns: 500,
         };
         if (specEnabled) {
           // Spec 优先：仅生成 Spec，编码延迟到用户确认后
@@ -610,7 +610,7 @@ The workspace Code Wiki is enabled at ${codeWikiDir}. When useful for the task, 
           model,
           allowedTools: ['Read', 'Edit', 'Bash', 'Glob', 'Grep', 'Write', 'TodoWrite', 'TaskCreate', 'TaskUpdate', 'TaskGet', 'TaskList'],
           permissionMode: 'acceptEdits',
-          maxTurns: 30,
+          maxTurns: 500,
         };
         if (specEnabled) {
           // Spec 优先：仅生成 Spec，编码延迟到用户确认后
@@ -686,7 +686,7 @@ The workspace Code Wiki is enabled at ${codeWikiDir}. When useful for the task, 
       model: effectiveModel,
       allowedTools: ['Read', 'Edit', 'Bash', 'Glob', 'Grep', 'Write', 'TodoWrite', 'TaskCreate', 'TaskUpdate', 'TaskGet', 'TaskList'],
       permissionMode: 'acceptEdits',
-      maxTurns: 30,
+      maxTurns: 500,
     };
     ensureSidecarAndQuery(() => {
       agent.compactQuery(selectedRabbit.id, selectedRabbit.sessionId!, cwd, options);

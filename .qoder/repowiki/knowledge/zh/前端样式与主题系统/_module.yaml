@@ -1,0 +1,11 @@
+schema_version: 1
+module_path: frontend_style
+title: 前端样式与主题系统
+scope: []
+source_files:
+    - src/index.css
+    - src/hooks/useTheme.tsx
+    - src/App.tsx
+    - package.json
+depends_on: []
+related_to: []

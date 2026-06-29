@@ -1,0 +1,14 @@
+schema_version: 1
+module_path: configuration_system
+title: 配置系统：Tauri 应用配置、环境变量与运行时注入
+scope: []
+source_files:
+    - src-tauri/tauri.conf.json
+    - vite.config.ts
+    - src-tauri/Cargo.toml
+    - src-tauri/src/lib.rs
+    - src/utils/portalClient.ts
+    - sidecar/src/index.ts
+    - .github/workflows/build.yml
+depends_on: []
+related_to: []

@@ -550,6 +550,14 @@ const zh = {
       },
     },
     advanced: {
+      portal: {
+        title: 'Portal 环境（调试）',
+        description: '切换模型列表与 AI 转发服务的后端地址，用于本地联调',
+        local: '本地调试模式',
+        localDesc: '开启后请求指向本地 Portal 后端，需先在 5173 端口启动该服务',
+        localNotice: '本地调试模式已开启：请确保已在 5173 端口启动本地 Portal 后端，并已将其加入 CORS 白名单（含 http://localhost:1420）',
+        currentOrigin: '当前生效地址',
+      },
       proxy: {
         title: '网络代理',
         description: '配置 HTTP/HTTPS/SOCKS 代理，用于 Agent 的网络请求',

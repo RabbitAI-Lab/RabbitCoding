@@ -1,0 +1,13 @@
+schema_version: 1
+module_path: error_handling
+title: 错误处理机制：Rust Result 传播与前端 Error Code 标记
+scope: []
+source_files:
+    - src-tauri/src/lib.rs
+    - src-tauri/src/network.rs
+    - src-tauri/src/db.rs
+    - src-tauri/src/auth.rs
+    - src/utils/portalClient.ts
+    - src/hooks/useAuth.tsx
+depends_on: []
+related_to: []

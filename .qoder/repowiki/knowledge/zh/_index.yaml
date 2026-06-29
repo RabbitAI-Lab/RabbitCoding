@@ -3,30 +3,28 @@ schema_version: 1
 locale: zh-CN
 branch: main
 nodes_managed: true
-exported_at: "2026-06-21T22:46:32Z"
+exported_at: "2026-06-28T19:18:00Z"
 modules:
     "":
-        dir_name: RabbitCoding AI 编程助手
-        title: RabbitCoding AI 编程助手
+        dir_name: Portal API 客户端与线上模型集成
+        title: Portal API 客户端与线上模型集成
         scope: []
         source_files: []
-        children:
-            - frontend
-            - sidecar
-            - tauri_backend
+        children: []
         depends_on: []
         related_to: []
     build_system:
-        dir_name: Tauri v2 桌面应用构建与 CI_CD 流水线
-        title: Tauri v2 桌面应用构建与 CI/CD 流水线
+        dir_name: Tauri 桌面应用构建与 CI_CD 发布体系
+        title: Tauri 桌面应用构建与 CI/CD 发布体系
         scope: []
         source_files:
             - .github/workflows/build.yml
             - src-tauri/tauri.conf.json
+            - src-tauri/Cargo.toml
             - package.json
+            - vite.config.ts
             - sidecar/package.json
             - sidecar/scripts/setup-resources.mjs
-            - src-tauri/Cargo.toml
         children: []
         depends_on: []
         related_to: []
@@ -74,27 +72,15 @@ modules:
         children: []
         depends_on: []
         related_to: []
-    frontend:
-        dir_name: AI 编程助手前端应用
-        title: AI 编程助手前端应用
-        scope:
-            - src/
-        source_files: []
-        children: []
-        depends_on: []
-        related_to:
-            - path: sidecar
-            - path: tauri_backend
     frontend_style:
-        dir_name: 前端视觉风格与主题系统
-        title: 前端视觉风格与主题系统
+        dir_name: 前端样式与主题系统
+        title: 前端样式与主题系统
         scope: []
         source_files:
             - src/index.css
-            - src/App.tsx
             - src/hooks/useTheme.tsx
+            - src/App.tsx
             - package.json
-            - src/components/sidebar/Sidebar.tsx
         children: []
         depends_on: []
         related_to: []
@@ -113,25 +99,3 @@ modules:
         children: []
         depends_on: []
         related_to: []
-    sidecar:
-        dir_name: Claude Agent SDK 桥接与协议网关
-        title: Claude Agent SDK 桥接与协议网关
-        scope:
-            - sidecar/
-        source_files: []
-        children: []
-        depends_on: []
-        related_to:
-            - path: frontend
-            - path: tauri_backend
-    tauri_backend:
-        dir_name: Tauri v2 桌面应用后端核心
-        title: Tauri v2 桌面应用后端核心
-        scope:
-            - src-tauri/
-        source_files: []
-        children: []
-        depends_on: []
-        related_to:
-            - path: frontend
-            - path: sidecar

@@ -16,6 +16,7 @@ import {
   fetchAiForwardingKey,
   type OnlineModel,
   AIKEY_NOT_RETURNED,
+  PORTAL_ENV_CHANGE_EVENT,
 } from '../utils/portalClient';
 import { useAuth } from './useAuth';
 
@@ -26,6 +27,11 @@ const AI_FORWARDING_KEY_PREFIX_STORAGE = 'ai-forwarding-key-prefix';
 // 模型列表简易缓存：避免短时间内重复请求（30s）
 const MODELS_CACHE_TTL_MS = 30_000;
 let modelsCache: { models: OnlineModel[]; ts: number } | null = null;
+
+/** 清空模型列表缓存（origin 切换等场景调用） */
+export function clearModelsCache(): void {
+  modelsCache = null;
+}
 
 export function useOnlineModels() {
   const { user } = useAuth();
@@ -113,6 +119,18 @@ export function useOnlineModels() {
   useEffect(() => {
     void refreshModels();
   }, [refreshModels]);
+
+  // 监听 Portal origin 切换：清除密钥与模型缓存后强制重新拉取
+  useEffect(() => {
+    const handler = () => {
+      // 两套环境的 AI 转发 Key 不通用，必须清除重取
+      clearAiForwardingKey();
+      clearModelsCache();
+      void refreshModels(true);
+    };
+    window.addEventListener(PORTAL_ENV_CHANGE_EVENT, handler);
+    return () => window.removeEventListener(PORTAL_ENV_CHANGE_EVENT, handler);
+  }, [clearAiForwardingKey, refreshModels]);
 
   return {
     onlineModels,
