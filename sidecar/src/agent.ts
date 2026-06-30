@@ -454,6 +454,8 @@ async function runQuery(
     process.stderr.write(`[agent] nativeCli: ${NATIVE_CLI_BINARY || "(node_modules default)"}\n`);
     process.stderr.write(`[agent] plugins: ${installedPlugins.length} enabled${installedPlugins.length > 0 ? " → " + installedPlugins.map(p => p.path).join(", ") : ""}\n`);
     process.stderr.write(`[agent] model: ${options.model || "(default)"}\n`);
+    process.stderr.write(`[agent] ANTHROPIC_BASE_URL: ${process.env.ANTHROPIC_BASE_URL || "(default)"}\n`);
+    process.stderr.write(`[agent] ANTHROPIC_API_KEY prefix: ${(process.env.ANTHROPIC_API_KEY || "").substring(0, 12)}...\n`);
     process.stderr.write(`[agent] ========================\n`);
 
     for await (const message of query({ prompt, options: queryOptions })) {
@@ -497,6 +499,15 @@ async function runQuery(
 
       // 忽略 thinking_tokens 系统消息（SDK 思考 token 估算反馈，当前前端未使用）
       if (msg.type === "system" && msg.subtype === "thinking_tokens") {
+        continue;
+      }
+
+      // 捕获 api_retry 消息并输出详细诊断日志（含 HTTP 状态码和错误原因）
+      if (msg.type === "system" && msg.subtype === "api_retry") {
+        process.stderr.write(
+          `[agent] API retry ${msg.attempt}/${msg.max_retries}: ` +
+          `status=${msg.error_status}, delay=${msg.retry_delay_ms}ms, error=${msg.error}\n`
+        );
         continue;
       }
 

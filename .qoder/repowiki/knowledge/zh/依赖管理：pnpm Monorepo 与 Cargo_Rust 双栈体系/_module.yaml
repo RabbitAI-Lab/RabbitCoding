@@ -1,0 +1,14 @@
+schema_version: 1
+module_path: dependency_management
+title: 依赖管理：pnpm Monorepo 与 Cargo/Rust 双栈体系
+scope: []
+source_files:
+    - package.json
+    - pnpm-lock.yaml
+    - pnpm-workspace.yaml
+    - sidecar/package.json
+    - sidecar/pnpm-lock.yaml
+    - src-tauri/Cargo.toml
+    - src-tauri/Cargo.lock
+depends_on: []
+related_to: []

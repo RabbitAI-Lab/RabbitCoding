@@ -3,25 +3,25 @@ schema_version: 1
 locale: zh-CN
 branch: main
 nodes_managed: true
-exported_at: "2026-06-28T19:18:00Z"
+exported_at: "2026-06-29T23:50:28Z"
 modules:
     "":
-        dir_name: Portal API 客户端与线上模型集成
-        title: Portal API 客户端与线上模型集成
+        dir_name: RabbitCoding 桌面应用
+        title: RabbitCoding 桌面应用
         scope: []
         source_files: []
         children: []
         depends_on: []
         related_to: []
     build_system:
-        dir_name: Tauri 桌面应用构建与 CI_CD 发布体系
-        title: Tauri 桌面应用构建与 CI/CD 发布体系
+        dir_name: Tauri v2 跨平台构建与 CI_CD 流水线
+        title: Tauri v2 跨平台构建与 CI/CD 流水线
         scope: []
         source_files:
             - .github/workflows/build.yml
-            - src-tauri/tauri.conf.json
-            - src-tauri/Cargo.toml
             - package.json
+            - src-tauri/Cargo.toml
+            - src-tauri/tauri.conf.json
             - vite.config.ts
             - sidecar/package.json
             - sidecar/scripts/setup-resources.mjs
@@ -44,58 +44,57 @@ modules:
         depends_on: []
         related_to: []
     dependency_management:
-        dir_name: 多语言混合依赖管理 (pnpm + Cargo)
-        title: 多语言混合依赖管理 (pnpm + Cargo)
+        dir_name: 依赖管理策略：pnpm Monorepo 与 Cargo 混合架构
+        title: 依赖管理策略：pnpm Monorepo 与 Cargo 混合架构
         scope: []
         source_files:
             - package.json
             - pnpm-lock.yaml
             - pnpm-workspace.yaml
             - sidecar/package.json
-            - sidecar/pnpm-lock.yaml
             - src-tauri/Cargo.toml
             - src-tauri/Cargo.lock
         children: []
         depends_on: []
         related_to: []
     error_handling:
-        dir_name: 错误处理与异常传播机制
-        title: 错误处理与异常传播机制
+        dir_name: 错误处理机制：Rust Result 传播与前端 Error Code 标记
+        title: 错误处理机制：Rust Result 传播与前端 Error Code 标记
         scope: []
         source_files:
             - src-tauri/src/lib.rs
-            - src-tauri/src/db.rs
-            - src-tauri/src/sidecar.rs
             - src-tauri/src/network.rs
-            - sidecar/src/agent.ts
-            - src/utils/notify.ts
+            - src-tauri/src/db.rs
+            - src-tauri/src/auth.rs
+            - src/utils/portalClient.ts
+            - src/hooks/useAuth.tsx
         children: []
         depends_on: []
         related_to: []
     frontend_style:
-        dir_name: 前端样式与主题系统
-        title: 前端样式与主题系统
+        dir_name: 前端视觉风格与主题系统
+        title: 前端视觉风格与主题系统
         scope: []
         source_files:
             - src/index.css
-            - src/hooks/useTheme.tsx
             - src/App.tsx
+            - src/hooks/useTheme.tsx
             - package.json
+            - src/components/sidebar/Sidebar.tsx
         children: []
         depends_on: []
         related_to: []
     logging_system:
-        dir_name: 日志系统
-        title: 日志系统
+        dir_name: 日志系统 — 基于标准输出_错误与控制台的控制台日志
+        title: 日志系统 — 基于标准输出/错误与控制台的控制台日志
         scope: []
         source_files:
             - src-tauri/src/lib.rs
             - src-tauri/src/auth.rs
-            - src-tauri/src/network.rs
             - src-tauri/src/integration.rs
-            - src/App.tsx
-            - src/components/ContentArea.tsx
-            - sidecar/scripts/setup-resources.mjs
+            - sidecar/src/index.ts
+            - sidecar/src/agent.ts
+            - src/utils/notify.ts
         children: []
         depends_on: []
         related_to: []

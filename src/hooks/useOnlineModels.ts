@@ -97,7 +97,49 @@ export function useOnlineModels() {
       const code = (err as Error & { code?: string }).code;
       if (code === AIKEY_NOT_RETURNED) {
         // Key 已存在但客户端未缓存 → 清掉旧值并提示需重新登录获取
+        localStorage.removeItem(AI_FORWARDING_KEY_STORAGE);
+        localStorage.removeItem(AI_FORWARDING_KEY_PREFIX_STORAGE);
+        setAiForwardingKey('');
         console.warn('[useOnlineModels] AI forwarding key exists but not returned, need re-login');
+      }
+      throw err;
+    } finally {
+      fetchingKeyRef.current = false;
+    }
+  }, [casdoorToken]);
+
+  // ============================================================
+  // 强制刷新 AI 转发 Key（绕过缓存，每次启动客户端时调用）
+  // ============================================================
+  const refreshAiForwardingKey = useCallback(async (): Promise<string> => {
+    if (!casdoorToken) {
+      throw new Error('NOT_LOGGED_IN');
+    }
+    if (fetchingKeyRef.current) {
+      throw new Error('IN_PROGRESS');
+    }
+    fetchingKeyRef.current = true;
+    try {
+      const result = await fetchAiForwardingKey(casdoorToken);
+      localStorage.setItem(AI_FORWARDING_KEY_STORAGE, result.key!);
+      localStorage.setItem(AI_FORWARDING_KEY_PREFIX_STORAGE, result.keyPrefix);
+      setAiForwardingKey(result.key!);
+      console.debug('[useOnlineModels] AI forwarding key refreshed (created:', result.created, ')');
+      return result.key!;
+    } catch (err) {
+      const code = (err as Error & { code?: string }).code;
+      if (code === AIKEY_NOT_RETURNED) {
+        // 服务端确认 key 已存在但未返回明文（非首次创建）→ 保留本地已有缓存值
+        const existing = localStorage.getItem(AI_FORWARDING_KEY_STORAGE) || '';
+        if (existing) {
+          console.debug('[useOnlineModels] AI forwarding key exists on server, keeping cached value');
+          return existing;
+        }
+        // 本地也无缓存 → 需重新登录或重置
+        localStorage.removeItem(AI_FORWARDING_KEY_STORAGE);
+        localStorage.removeItem(AI_FORWARDING_KEY_PREFIX_STORAGE);
+        setAiForwardingKey('');
+        console.warn('[useOnlineModels] AI forwarding key exists but not returned on refresh and no local cache, need re-login');
       }
       throw err;
     } finally {
@@ -115,10 +157,17 @@ export function useOnlineModels() {
     console.debug('[useOnlineModels] AI forwarding key cleared');
   }, []);
 
-  // 组件挂载时自动拉取一次模型列表
+  // 组件挂载时自动拉取模型列表 + 刷新 AI 转发 Key（保留本地缓存，避免服务端不返回明文时丢失）
   useEffect(() => {
     void refreshModels();
-  }, [refreshModels]);
+    if (casdoorToken) {
+      // 尝试从服务端刷新 key；若服务端返回 AIKEY_NOT_RETURNED（key 已创建过、不返回明文），
+      // refreshAiForwardingKey 内部会保留本地已有缓存值，不会报错
+      refreshAiForwardingKey().catch(err => {
+        console.warn('[useOnlineModels] auto-refresh AI forwarding key on startup failed:', err);
+      });
+    }
+  }, [casdoorToken, refreshAiForwardingKey, refreshModels]);
 
   // 监听 Portal origin 切换：清除密钥与模型缓存后强制重新拉取
   useEffect(() => {
@@ -138,6 +187,7 @@ export function useOnlineModels() {
     refreshModels,
     aiForwardingKey,
     ensureAiForwardingKey,
+    refreshAiForwardingKey,
     clearAiForwardingKey,
     isLoggedIn: !!casdoorToken,
   };

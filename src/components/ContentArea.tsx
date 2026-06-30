@@ -308,6 +308,15 @@ The workspace Code Wiki is enabled at ${codeWikiDir}. When useful for the task, 
       return;
     }
 
+    // 诊断日志：打印当前使用的模型配置（线上 vs 自定义）
+    const _isOnline = isOnlineModelId(selectedModelConfigId);
+    console.debug('[ContentArea] ensureSidecarAndQuery:', {
+      isOnlineModel: _isOnline,
+      baseUrl: effectiveBaseUrl,
+      apiKeyPrefix: effectiveApiKey.slice(0, 12) + '...',
+      model: selectedModelConfig?.modelId,
+    });
+
     // 3. 合并代理环境变量（代理变量在前，模型配置 envVars 可覆盖）
     const proxyEnvVars = proxyConfigToEnvVars(proxyConfig);
     effectiveEnvVars = { ...proxyEnvVars, ...effectiveEnvVars };

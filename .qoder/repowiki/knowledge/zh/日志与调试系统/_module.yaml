@@ -1,0 +1,12 @@
+schema_version: 1
+module_path: logging_system
+title: 日志与调试系统
+scope: []
+source_files:
+    - src-tauri/src/lib.rs
+    - src-tauri/src/sidecar.rs
+    - src-tauri/src/wiki/generator/repo.rs
+    - src/utils/notify.ts
+    - src/components/ContentArea.tsx
+depends_on: []
+related_to: []

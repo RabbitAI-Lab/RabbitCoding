@@ -1,0 +1,14 @@
+schema_version: 1
+module_path: error_handling
+title: 错误处理与异常传播机制
+scope: []
+source_files:
+    - src-tauri/src/voice.rs
+    - src-tauri/src/wiki/generator/helpers.rs
+    - src-tauri/src/wiki/generator/repo.rs
+    - src-tauri/src/wiki/generator/orchestrator.rs
+    - src-tauri/src/gitnexus.rs
+    - src-tauri/src/feedback.rs
+    - src-tauri/src/lib.rs
+depends_on: []
+related_to: []

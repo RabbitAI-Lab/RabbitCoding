@@ -13,6 +13,15 @@ struct SidecarHandle {
     child: std::process::Child,
 }
 
+impl Drop for SidecarHandle {
+    fn drop(&mut self) {
+        // 应用退出 / SidecarState 释放时自动 kill 子进程，
+        // 避免 Node.js sidecar 成为孤儿进程（尤其实际关闭主窗口的场景）。
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
+}
+
 /// 启动 sidecar 的参数
 #[derive(Debug, Deserialize)]
 pub struct StartSidecarPayload {
@@ -138,6 +147,11 @@ pub fn start_sidecar(
             cmd.env("ANTHROPIC_BASE_URL", base_url);
         }
     }
+
+    // 诊断日志：打印注入的模型配置（脱敏）
+    let key_prefix: String = payload.api_key.chars().take(12).collect();
+    eprintln!("[sidecar] Injected ANTHROPIC_API_KEY prefix: {}...", key_prefix);
+    eprintln!("[sidecar] Injected ANTHROPIC_BASE_URL: {}", payload.base_url.as_deref().unwrap_or("(default)"));
 
     // 3. 自定义环境变量（含 apiKeyEnvVar 映射）
     if let Some(ref vars) = payload.env_vars {
