@@ -18,6 +18,10 @@ use std::collections::{BTreeMap, HashSet};
 use std::process::Command;
 use tauri::{Manager, PhysicalSize, WindowEvent};
 use tauri_plugin_window_state::{AppHandleExt, StateFlags};
+use std::sync::atomic::{AtomicBool, Ordering};
+
+/// 桌宠窗口拖拽状态标志：拖拽期间暂停鼠标穿透轮询，确保 pointer 事件不被中断
+static PET_DRAGGING: AtomicBool = AtomicBool::new(false);
 
 #[tauri::command]
 fn greet(name: &str) -> String {
@@ -461,6 +465,120 @@ fn activate_main_window(app: tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+/// 设置桌宠窗口拖拽状态：拖拽期间通知 Rust 端暂停鼠标穿透轮询
+#[tauri::command]
+fn set_pet_dragging(dragging: bool) {
+    eprintln!("[pet-drag] set_pet_dragging={}", dragging);
+    PET_DRAGGING.store(dragging, Ordering::SeqCst);
+}
+
+/// 保存桌宠窗口位置到 app_data_dir/pet-position.json
+/// 存储 { x, y, monitor } 三要素：物理坐标 + 所在显示器名称
+#[tauri::command]
+fn save_pet_position(window: tauri::WebviewWindow, app_handle: tauri::AppHandle) {
+    use tauri::Manager;
+
+    let pos = match window.outer_position() {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("[pet-position] failed to get outer_position: {e}");
+            return;
+        }
+    };
+    let monitor_name = window
+        .current_monitor()
+        .ok()
+        .flatten()
+        .and_then(|m| m.name().map(|n| n.to_string()))
+        .unwrap_or_else(|| "Unknown".to_string());
+
+    let data = serde_json::json!({
+        "x": pos.x,
+        "y": pos.y,
+        "monitor": monitor_name,
+    });
+
+    let app_data_dir = app_handle.path().app_data_dir();
+    let dir = match &app_data_dir {
+        Ok(d) => d,
+        Err(e) => {
+            eprintln!("[pet-position] failed to get app_data_dir: {e}");
+            return;
+        }
+    };
+    let file_path = dir.join("pet-position.json");
+    match std::fs::write(&file_path, data.to_string()) {
+        Ok(_) => {
+            eprintln!("[pet-position] saved: ({}, {}) on \"{}\"", pos.x, pos.y, monitor_name);
+        }
+        Err(e) => {
+            eprintln!("[pet-position] failed to write: {e}");
+        }
+    }
+}
+
+/// 从 app_data_dir/pet-position.json 恢复桌宠窗口位置
+/// 如果保存的显示器名称不在当前可用列表中，跳过恢复（让 clampWindowToScreen 处理）
+#[tauri::command]
+fn restore_pet_position(window: tauri::WebviewWindow, app_handle: tauri::AppHandle) {
+    use tauri::Manager;
+
+    let app_data_dir = match app_handle.path().app_data_dir() {
+        Ok(d) => d,
+        Err(e) => {
+            eprintln!("[pet-position] restore: failed to get app_data_dir: {e}");
+            return;
+        }
+    };
+    let file_path = app_data_dir.join("pet-position.json");
+    let content = match std::fs::read_to_string(&file_path) {
+        Ok(c) => c,
+        Err(_) => {
+            eprintln!("[pet-position] restore: no saved position file");
+            return;
+        }
+    };
+
+    let data: serde_json::Value = match serde_json::from_str(&content) {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("[pet-position] restore: parse error: {e}");
+            return;
+        }
+    };
+
+    let saved_x = data.get("x").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
+    let saved_y = data.get("y").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
+    let saved_monitor = data
+        .get("monitor")
+        .and_then(|v| v.as_str())
+        .unwrap_or("Unknown");
+
+    // 检查保存的显示器是否仍存在于当前可用列表
+    let monitor_exists = app_handle
+        .available_monitors()
+        .map(|monitors| {
+            monitors
+                .iter()
+                .any(|m| m.name().map(|n| n == saved_monitor).unwrap_or(false))
+        })
+        .unwrap_or(false);
+
+    if !monitor_exists {
+        eprintln!(
+            "[pet-position] restore: monitor \"{}\" not found, skipping (clamp will handle)",
+            saved_monitor
+        );
+        return;
+    }
+
+    let _ = window.set_position(tauri::PhysicalPosition::new(saved_x, saved_y));
+    eprintln!(
+        "[pet-position] restored: ({}, {}) on \"{}\"",
+        saved_x, saved_y, saved_monitor
+    );
+}
+
 /// macOS FFI：激活当前应用为前台应用（跨应用置顶）
 #[cfg(target_os = "macos")]
 fn macos_activate_app() {
@@ -490,6 +608,34 @@ fn macos_activate_app() {
         let sel = sel_registerName(sel_name);
         let yes: c_int = 1;
         objc_msgSend(app, sel, yes);
+    }
+}
+
+/// Windows FFI：通过 DWM API 移除透明窗口拖拽时系统绘制的 1px 边框
+#[cfg(target_os = "windows")]
+fn remove_drag_border(window: &tauri::WebviewWindow) {
+    use winapi::shared::minwindef::DWORD;
+    use winapi::um::dwmapi::DwmSetWindowAttribute;
+
+    let hwnd = match window.hwnd() {
+        Ok(h) => h,
+        Err(_) => {
+            eprintln!("[pet-drag] failed to get HWND for remove_drag_border");
+            return;
+        }
+    };
+
+    unsafe {
+        // DWMWA_BORDER_COLOR = 34 (Windows 11+)
+        // DWMWA_COLOR_NONE = 0xFFFFFFFE (系统定义的“无边框颜色”)
+        let color: u32 = 0xFFFFFFFE;
+        let hr = DwmSetWindowAttribute(
+            hwnd.0 as _,
+            34 as DWORD,
+            &color as *const _ as *const _,
+            std::mem::size_of::<u32>() as DWORD,
+        );
+        eprintln!("[pet-drag] DwmSetWindowAttribute(border_color=NONE) hr={}", hr);
     }
 }
 
@@ -789,8 +935,12 @@ pub fn run() {
                         let _ = app_handle.save_window_state(StateFlags::all());
                     }
                     WindowEvent::CloseRequested { .. } => {
-                        println!("[window-state] close requested, saving...");
+                        println!("[window-state] close requested, saving & exiting app...");
                         let _ = app_handle.save_window_state(StateFlags::all());
+                        // 关闭主窗口即退出整个应用（pet 窗口随之一并销毁，避免进程残留）。
+                        // 双窗口下若不显式 exit，Tauri 默认“所有窗口关闭才退出”，
+                        // 而 pet 窗口 skipTaskbar 不可见，会导致主进程常驻不退出。
+                        app_handle.exit(0);
                     }
                     _ => {}
                 });
@@ -813,11 +963,39 @@ pub fn run() {
             // 宠物窗口：动态点击穿透（仅图标区域可交互，透明区域穿透到桌面）
             if let Some(pet_window) = app.get_webview_window("pet") {
                 eprintln!("[pet-cursor] pet window found, starting cursor ignore polling");
+
+                // Windows 下移除拖拽时 DWM 绘制的系统边框
+                #[cfg(target_os = "windows")]
+                remove_drag_border(&pet_window);
+
+                // 启动时恢复上次保存的位置
+                restore_pet_position(pet_window.clone(), app.handle().clone());
+
+                // 监听 Moved 事件：拖拽结束后保存位置（拖拽中通过 PET_DRAGGING 过滤）
+                {
+                    let pw = pet_window.clone();
+                    let ah = app.handle().clone();
+                    pet_window.on_window_event(move |e| {
+                        if let WindowEvent::Moved(_) = e {
+                            // 拖拽中不保存（拖拽期间会频繁触发 Moved）
+                            if PET_DRAGGING.load(Ordering::SeqCst) {
+                                return;
+                            }
+                            save_pet_position(pw.clone(), ah.clone());
+                        }
+                    });
+                }
+
                 let pet_window = pet_window.clone();
                 tauri::async_runtime::spawn(async move {
                     let mut last_ignore = false;
                     loop {
-                        let should_ignore = compute_pet_cursor_ignore(&pet_window).unwrap_or(false);
+                        // 拖拽期间强制不穿透，确保 pointer 事件正常
+                        let should_ignore = if PET_DRAGGING.load(Ordering::SeqCst) {
+                            false
+                        } else {
+                            compute_pet_cursor_ignore(&pet_window).unwrap_or(false)
+                        };
                         if should_ignore != last_ignore {
                             eprintln!("[pet-cursor] ignore={} ({}→{})",
                                 should_ignore, last_ignore, should_ignore);
@@ -839,6 +1017,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             greet,
             activate_main_window,
+            set_pet_dragging,
+            save_pet_position,
+            restore_pet_position,
             ensure_workspace_docs_dir,
             ensure_rabbit_specs_dir,
             ensure_rabbit_codewiki_dir,
