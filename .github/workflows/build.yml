@@ -39,6 +39,10 @@ jobs:
     # 否则默认 GITHUB_TOKEN 权限不足 → "Resource not accessible by integration"
     permissions:
       contents: write
+    outputs:
+      # 矩阵各 leg 的 steps.rel.outputs.tag_name 相同(SHA 与日期一致),
+      # 通过 job output 传递给 sync-nightly,避免跨午夜重算日期导致归档 tag 漂移
+      archive_tag: ${{ steps.rel.outputs.tag_name }}
     steps:
       - uses: actions/checkout@v4
 
@@ -210,15 +214,34 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SHORT_SHA: ${{ github.sha }}
+          SHORT_SHA_FULL: ${{ github.sha }}
+          # build job 实际创建的归档 tag,避免本 job 重算日期导致跨午夜漂移
+          ARCHIVE_TAG_FROM_BUILD: ${{ needs.build.outputs.archive_tag }}
         run: |
-          DATE=$(date -u +%Y%m%d)
-          ARCHIVE_TAG="nightly-${DATE}-${SHORT_SHA::7}"
+          SHORT_SHA="${SHORT_SHA_FULL::7}"
+
+          # ---- 优先使用 build job 传递的实际 tag ----
+          ARCHIVE_TAG="${ARCHIVE_TAG_FROM_BUILD}"
+
+          # ---- 兜底:build 未传递时按 SHA 自动发现 ----
+          if [ -z "$ARCHIVE_TAG" ]; then
+            echo "WARN: build job did not pass archive_tag, discovering by SHA..."
+            ARCHIVE_TAG=$(gh release list --json tagName --jq ".[].tagName" \
+              | grep "^nightly-.*-${SHORT_SHA}$" | head -1)
+          fi
+
+          if [ -z "$ARCHIVE_TAG" ]; then
+            echo "ERROR: No archive release found for commit ${SHORT_SHA}."
+            echo "Build job may have failed to publish."
+            exit 1
+          fi
+
+          echo "Archive tag: $ARCHIVE_TAG"
 
           echo "=== Syncing nightly tag to latest commit ==="
           # force-move nightly tag 到当前 commit
           git push origin :refs/tags/nightly 2>/dev/null || true
-          git tag -f nightly "$SHORT_SHA"
+          git tag -f nightly "$SHORT_SHA_FULL"
           git push origin refs/tags/nightly
 
           echo "=== Recreating nightly release ==="
@@ -226,7 +249,7 @@ jobs:
           gh release delete nightly -y 2>/dev/null || true
           # 创建新的滚动 nightly release(prerelease)
           gh release create nightly \
-            --target "$SHORT_SHA" \
+            --target "$SHORT_SHA_FULL" \
             --title "Nightly (Latest Build)" \
             --notes "Latest nightly build. Archived builds: nightly-* tags." \
             --prerelease
