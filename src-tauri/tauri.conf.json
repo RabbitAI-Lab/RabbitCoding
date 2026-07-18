@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "identifier": "com.rabbitai-lab.coding",
   "build": {
-    "beforeDevCommand": "pnpm dev",
+    "beforeDevCommand": "pnpm setup:runtime && pnpm dev",
     "devUrl": "http://localhost:1420",
     "beforeBuildCommand": "pnpm build",
     "frontendDist": "../dist"

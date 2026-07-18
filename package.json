@@ -9,7 +9,8 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
-    "setup:resources": "pnpm -C sidecar run setup-resources"
+    "setup:resources": "pnpm -C sidecar run setup-resources",
+    "setup:runtime": "node scripts/setup-node-runtime.mjs"
   },
   "dependencies": {
     "@ant-design/x": "^2.8.0",
