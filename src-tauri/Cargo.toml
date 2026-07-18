@@ -40,7 +40,7 @@ tauri-plugin-deep-link = "2"
 tauri-plugin-updater = "2"
 
 [target.'cfg(windows)'.dependencies]
-winapi = { version = "0.3", features = ["dwmapi", "windef", "minwindef"] }
+winapi = { version = "0.3", features = ["dwmapi", "windef", "minwindef", "winuser"] }
 
 # sherpa-onnx 官方未提供 Windows ARM64 预编译库
 # 仅在受支持的目标上启用语音识别功能

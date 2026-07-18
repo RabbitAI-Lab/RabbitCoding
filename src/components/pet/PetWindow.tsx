@@ -5,6 +5,71 @@ import { currentMonitor, getCurrentWindow } from '@tauri-apps/api/window';
 import { invoke } from '@tauri-apps/api/core';
 import type { PetTask, PetTasksPayload } from './types';
 
+// ============================================================
+// 桌宠像素级点击掩码
+//
+// 把兔子主体轮廓重画到离屏 canvas，读 alpha 生成二值位图下发 Rust。
+// Rust 据此逐像素判定穿透（Win32 WM_NCHITTEST / macOS 轮询），
+// 取代旧的硬编码矩形——兔耳间隙、身体四周留白等盒内透明区也会正确穿透。
+// ============================================================
+
+/** pet 窗口逻辑尺寸（tauri.conf.json 固定，resizable:false） */
+const PET_WIN_W = 320;
+const PET_WIN_H = 280;
+
+/** 桌宠盒子布局（须与 index.css .pet-window-stage padding 14/14/16 + flex-end/center 一致） */
+const ICON_W = 92;
+const ICON_H = 118;
+const ICON_LEFT = 14 + (PET_WIN_W - 28 - ICON_W) / 2; // 水平居中
+const ICON_TOP = PET_WIN_H - 16 - ICON_H; // 底部对齐
+
+/** 兔子主体填充 path（SVG viewBox 0 0 132 168 坐标）。须与 CyberRabbitPet 的 SVG 同步 */
+const PET_FILL_PATHS: string[] = [
+  'M47 64C35 35 19 9 9 12C-1 16 5 50 32 84C37 75 42 68 47 64Z', // 左耳填充
+  'M85 64C97 35 113 9 123 12C133 16 127 50 100 84C95 75 90 68 85 64Z', // 右耳填充
+  'M31 82C38 61 52 55 66 56C80 55 94 61 101 82C115 92 115 118 100 128C94 145 79 154 66 148C53 154 38 145 32 128C17 118 17 92 31 82Z', // 头填充
+  'M36 124C26 135 24 153 37 158C48 162 57 151 66 135C75 151 84 162 95 158C108 153 106 135 96 124C84 132 48 132 36 124Z', // 身体填充
+];
+/** 地面阴影椭圆（viewBox 坐标）——让兔子脚下区域也可交互 */
+const PET_FLOOR_ELLIPSE = { cx: 66, cy: 155, rx: 47, ry: 8 };
+
+/** alpha 阈值：>此值视为可点击像素。取较低值让抗锯齿边缘也算可点 */
+const ALPHA_THRESHOLD = 40;
+
+/** 生成桌宠点击掩码：bitpack（每像素 1 bit）+ base64 */
+function generatePetHitmask(): { width: number; height: number; mask: string } {
+  const canvas = document.createElement('canvas');
+  canvas.width = PET_WIN_W;
+  canvas.height = PET_WIN_H;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (!ctx) return { width: PET_WIN_W, height: PET_WIN_H, mask: '' };
+
+  // 把兔子从 viewBox(132x168) 缩放到 ICON_W x ICON_H，平移到盒子位置
+  ctx.save();
+  ctx.translate(ICON_LEFT, ICON_TOP);
+  ctx.scale(ICON_W / 132, ICON_H / 168);
+  ctx.fillStyle = '#000';
+  for (const d of PET_FILL_PATHS) {
+    ctx.fill(new Path2D(d));
+  }
+  ctx.beginPath();
+  ctx.ellipse(PET_FLOOR_ELLIPSE.cx, PET_FLOOR_ELLIPSE.cy, PET_FLOOR_ELLIPSE.rx, PET_FLOOR_ELLIPSE.ry, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  // 读取 alpha，bitpack（行优先，pixel(x,y) = bits[(y*w+x)>>3] & (1<<((y*w+x)&7))）
+  const img = ctx.getImageData(0, 0, PET_WIN_W, PET_WIN_H).data;
+  const total = PET_WIN_W * PET_WIN_H;
+  const bits = new Uint8Array((total + 7) >> 3);
+  for (let i = 0; i < total; i++) {
+    if (img[i * 4 + 3] > ALPHA_THRESHOLD) bits[i >> 3] |= 1 << (i & 7);
+  }
+  // Uint8Array → base64
+  let bin = '';
+  for (let i = 0; i < bits.length; i++) bin += String.fromCharCode(bits[i]);
+  return { width: PET_WIN_W, height: PET_WIN_H, mask: btoa(bin) };
+}
+
 function TaskRow({ task }: { task: PetTask }) {
   const shouldScroll = task.output.length > 36;
 
@@ -133,6 +198,20 @@ export default function PetWindow() {
       document.documentElement.classList.remove('pet-window-document');
       document.body.classList.remove('pet-window-document');
     };
+  }, []);
+
+  // 下发像素级点击掩码给 Rust（挂载时一次；pet 窗口固定尺寸不可 resize）
+  useEffect(() => {
+    try {
+      const { width, height, mask } = generatePetHitmask();
+      if (mask) {
+        void invoke('set_pet_hitmask', { width, height, mask }).catch((e) => {
+          console.warn('[pet-hitmask] set_pet_hitmask failed:', e);
+        });
+      }
+    } catch (e) {
+      console.warn('[pet-hitmask] generate failed:', e);
+    }
   }, []);
 
   const clampWindowToScreen = useCallback(async () => {

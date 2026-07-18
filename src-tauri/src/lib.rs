@@ -21,9 +21,75 @@ use crate::process_ext::CommandNoWindowExt;
 use tauri::{Manager, PhysicalSize, WindowEvent};
 use tauri_plugin_window_state::{AppHandleExt, StateFlags};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
 
 /// 桌宠窗口拖拽状态标志：拖拽期间暂停鼠标穿透轮询，确保 pointer 事件不被中断
 static PET_DRAGGING: AtomicBool = AtomicBool::new(false);
+
+/// 桌宠点击掩码：前端把整窗渲染成二值 alpha 位图下发，1=该像素可交互，0=穿透。
+/// 取代旧的硬编码矩形判定——兔子盒内的透明缝隙（耳间空隙、身体四周留白）
+/// 也会被正确识别为穿透区，不再拦截下层窗口点击。
+struct PetHitMask {
+    width: u32,
+    height: u32,
+    /// bitpack：每像素 1 bit，行优先，pixel(x,y) = bits[(y*width+x) / 8] & (1 << ((y*width+x) % 8))
+    bits: Vec<u8>,
+}
+
+static PET_HITMASK: Mutex<Option<PetHitMask>> = Mutex::new(None);
+
+/// 查询窗口内某逻辑像素坐标是否落在桌宠可交互像素上。
+/// (x, y) 为相对桌宠窗口左上角的逻辑像素坐标。
+/// 无掩码时返回 true（保守可点）——避免掩码未就绪时桌宠整体穿透失效。
+fn pet_point_clickable(x: f64, y: f64) -> bool {
+    let guard = match PET_HITMASK.lock() {
+        Ok(g) => g,
+        Err(_) => return true,
+    };
+    match guard.as_ref() {
+        None => true,
+        Some(mask) => {
+            if x < 0.0 || y < 0.0 {
+                return false;
+            }
+            let ix = x as u32;
+            let iy = y as u32;
+            if ix >= mask.width || iy >= mask.height {
+                return false;
+            }
+            let idx = (iy * mask.width + ix) as usize;
+            (mask.bits[idx >> 3] >> (idx & 7)) & 1 != 0
+        }
+    }
+}
+
+/// 前端下发桌宠点击掩码（挂载 / 窗口尺寸变化时调用）。
+/// mask_base64 为 bitpack 的 base64 编码（每像素 1 bit）。
+#[tauri::command]
+fn set_pet_hitmask(width: u32, height: u32, mask_base64: String) -> Result<(), String> {
+    use base64::{engine::general_purpose::STANDARD, Engine};
+    let bits = STANDARD
+        .decode(mask_base64.as_bytes())
+        .map_err(|e| format!("invalid hitmask base64: {e}"))?;
+    let expected = ((width as usize) * (height as usize) + 7) / 8;
+    let bits_len = bits.len();
+    if bits_len != expected {
+        return Err(format!(
+            "hitmask size mismatch: got {} bytes, expected {} for {}x{}",
+            bits_len, expected, width, height
+        ));
+    }
+    let mut guard = PET_HITMASK
+        .lock()
+        .map_err(|e| format!("hitmask lock poisoned: {e}"))?;
+    *guard = Some(PetHitMask {
+        width,
+        height,
+        bits,
+    });
+    eprintln!("[pet-hitmask] set: {}x{}, {} bytes", width, height, bits_len);
+    Ok(())
+}
 
 #[tauri::command]
 fn greet(name: &str) -> String {
@@ -645,6 +711,94 @@ fn remove_drag_border(window: &tauri::WebviewWindow) {
     }
 }
 
+/// Windows：桌宠窗口像素级点击穿透。
+///
+/// 通过 SetWindowSubclass 拦截 WM_NCHITTEST，按桌宠 alpha 掩码逐像素判定：
+/// 鼠标落在透明像素 → 返回 HTTRANSPARENT，事件穿透到下层 Z 序窗口；
+/// 落在不透明像素 → 交 DefSubclassProc（默认 client，可正常拖拽/点击）。
+/// 仅处理 WM_NCHITTEST 一条消息，其余全部 DefSubclassProc，不干扰 Tauri 窗口过程。
+#[cfg(target_os = "windows")]
+const PET_HITTEST_SUBCLASS_ID: usize = 0x5243_5045; // 'RCPE'
+
+// winapi 0.3.9 未提供 comctl32 feature，SetWindowSubclass/DefSubclassProc 自行声明并链接 comctl32.dll。
+#[cfg(target_os = "windows")]
+type PetSubclassProc = Option<
+    unsafe extern "system" fn(
+        winapi::shared::windef::HWND,
+        winapi::shared::minwindef::UINT,
+        winapi::shared::minwindef::WPARAM,
+        winapi::shared::minwindef::LPARAM,
+        usize,
+        usize,
+    ) -> winapi::shared::minwindef::LRESULT,
+>;
+
+#[cfg(target_os = "windows")]
+#[link(name = "comctl32")]
+extern "system" {
+    fn SetWindowSubclass(
+        hwnd: winapi::shared::windef::HWND,
+        pfn: PetSubclassProc,
+        id_subclass: usize,
+        ref_data: usize,
+    ) -> i32;
+    fn DefSubclassProc(
+        hwnd: winapi::shared::windef::HWND,
+        msg: winapi::shared::minwindef::UINT,
+        wparam: winapi::shared::minwindef::WPARAM,
+        lparam: winapi::shared::minwindef::LPARAM,
+    ) -> winapi::shared::minwindef::LRESULT;
+}
+
+#[cfg(target_os = "windows")]
+unsafe extern "system" fn pet_hit_test_proc(
+    hwnd: winapi::shared::windef::HWND,
+    msg: winapi::shared::minwindef::UINT,
+    wparam: winapi::shared::minwindef::WPARAM,
+    lparam: winapi::shared::minwindef::LPARAM,
+    _uid: usize,
+    _ref: usize,
+) -> winapi::shared::minwindef::LRESULT {
+    use winapi::shared::windef::POINT;
+    use winapi::um::winuser::{GetDpiForWindow, ScreenToClient, WM_NCHITTEST};
+
+    const HTTRANSPARENT: isize = -1;
+
+    if msg == WM_NCHITTEST {
+        // lParam 低/高字 = 屏幕物理坐标（signed，多屏可负），等价 GET_X/Y_LPARAM
+        let l = lparam as i64;
+        let mut pt = POINT {
+            x: (l as u16) as i16 as i32,
+            y: ((l >> 16) as u16) as i16 as i32,
+        };
+        if ScreenToClient(hwnd, &mut pt) != 0 {
+            // 客户区物理坐标 → 逻辑像素（与前端掩码分辨率对齐）
+            let dpi = GetDpiForWindow(hwnd);
+            let scale = if dpi == 0 { 1.0 } else { dpi as f64 / 96.0 };
+            if !pet_point_clickable(pt.x as f64 / scale, pt.y as f64 / scale) {
+                return HTTRANSPARENT;
+            }
+        }
+    }
+    DefSubclassProc(hwnd, msg, wparam, lparam)
+}
+
+#[cfg(target_os = "windows")]
+fn install_pet_hit_test(window: &tauri::WebviewWindow) {
+    let hwnd = match window.hwnd() {
+        Ok(h) => h,
+        Err(_) => {
+            eprintln!("[pet-hittest] failed to get HWND");
+            return;
+        }
+    };
+    unsafe {
+        let proc: PetSubclassProc = Some(pet_hit_test_proc);
+        let ok = SetWindowSubclass(hwnd.0 as _, proc, PET_HITTEST_SUBCLASS_ID, 0);
+        eprintln!("[pet-hittest] SetWindowSubclass ok={}", ok);
+    }
+}
+
 /// Windows FFI：跨应用将主窗口置顶（SetForegroundWindow + AttachThreadInput 绕过前台锁定）
 #[cfg(target_os = "windows")]
 fn windows_activate_window(window: &tauri::WebviewWindow) {
@@ -758,50 +912,25 @@ mod pet_cursor_ffi {
     }
 }
 
-/// 判断宠物窗口是否应该忽略鼠标事件（穿透）。
-/// 返回 true = 透明区域穿透；false = 图标区域可交互。
+/// macOS：判断桌宠窗口某处是否应忽略鼠标事件（穿透）。
+/// 像素级判定——查前端下发的 alpha 掩码，透明像素返回 true（穿透）。
+/// Windows 不走此函数（由 WM_NCHITTEST subclass 直接接管，无轮询延迟）。
 fn compute_pet_cursor_ignore(pet_window: &tauri::WebviewWindow) -> Option<bool> {
-    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    #[cfg(target_os = "macos")]
     {
+        // CGEvent 返回全局 points（逻辑像素，主屏左上原点）
         let (mouse_x, mouse_y) = pet_cursor_ffi::global_mouse_position()?;
-
         let scale = pet_window.scale_factor().unwrap_or(1.0);
+        // outer_position 为物理像素，/scale 转逻辑与掩码分辨率对齐
         let win_pos = pet_window.outer_position().ok()?;
-        let win_size = pet_window.outer_size().ok()?;
-
-        // 转换为逻辑像素
-        // macOS: CGEvent 返回 points（逻辑像素），窗口物理坐标需 /scale 对齐
-        // Windows: GetCursorPos 返回物理像素，窗口也是物理像素，两者 /scale 后统一为逻辑像素
-        let win_x = win_pos.x as f64 / scale;
-        let win_y = win_pos.y as f64 / scale;
-        let win_w = win_size.width as f64 / scale;
-        let win_h = win_size.height as f64 / scale;
-
-        // macOS: CGEvent 坐标已经是 points，直接使用
-        // Windows: GetCursorPos 返回物理像素，需 /scale 转逻辑像素
-        #[cfg(target_os = "windows")]
-        let (mouse_x, mouse_y) = (mouse_x / scale, mouse_y / scale);
-
-        let rel_x = mouse_x - win_x;
-        let rel_y = mouse_y - win_y;
-
-        // 图标区域（逻辑像素）：CSS 布局 stage padding 14px/14px/16px, flex justify-end align-center
-        let icon_w = 92.0;
-        let icon_h = 118.0;
-        let icon_left = 14.0 + (win_w - 28.0 - icon_w) / 2.0;
-        let icon_top = win_h - 16.0 - icon_h;
-
-        let in_icon = rel_x >= icon_left
-            && rel_x <= icon_left + icon_w
-            && rel_y >= icon_top
-            && rel_y <= icon_top + icon_h;
-
-        Some(!in_icon)
+        let rel_x = mouse_x - win_pos.x as f64 / scale;
+        let rel_y = mouse_y - win_pos.y as f64 / scale;
+        Some(!pet_point_clickable(rel_x, rel_y))
     }
-    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    #[cfg(not(target_os = "macos"))]
     {
-        let _ = pet_window; // 避免 unused 警告
-        None // Linux 暂不支持穿透
+        let _ = pet_window;
+        None
     }
 }
 
@@ -966,13 +1095,16 @@ pub fn run() {
             let wiki_state = wiki::create_wiki_queue_and_worker(app.handle().clone());
             app.manage(wiki_state);
 
-            // 宠物窗口：动态点击穿透（仅图标区域可交互，透明区域穿透到桌面）
+            // 宠物窗口：像素级点击穿透（仅桌宠不透明像素可交互，透明区域穿透到桌面/下层窗口）
             if let Some(pet_window) = app.get_webview_window("pet") {
-                eprintln!("[pet-cursor] pet window found, starting cursor ignore polling");
+                eprintln!("[pet-cursor] pet window found, installing click-through");
 
-                // Windows 下移除拖拽时 DWM 绘制的系统边框
+                // Windows：移除拖拽系统边框 + 安装 WM_NCHITTEST subclass（零延迟像素级穿透）
                 #[cfg(target_os = "windows")]
-                remove_drag_border(&pet_window);
+                {
+                    remove_drag_border(&pet_window);
+                    install_pet_hit_test(&pet_window);
+                }
 
                 // 启动时恢复上次保存的位置
                 restore_pet_position(pet_window.clone(), app.handle().clone());
@@ -992,26 +1124,30 @@ pub fn run() {
                     });
                 }
 
-                let pet_window = pet_window.clone();
-                tauri::async_runtime::spawn(async move {
-                    let mut last_ignore = false;
-                    loop {
-                        // 拖拽期间强制不穿透，确保 pointer 事件正常
-                        let should_ignore = if PET_DRAGGING.load(Ordering::SeqCst) {
-                            false
-                        } else {
-                            compute_pet_cursor_ignore(&pet_window).unwrap_or(false)
-                        };
-                        if should_ignore != last_ignore {
-                            eprintln!("[pet-cursor] ignore={} ({}→{})",
-                                should_ignore, last_ignore, should_ignore);
-                            let _ = pet_window.set_ignore_cursor_events(should_ignore);
-                            last_ignore = should_ignore;
+                // macOS：轮询 set_ignore_cursor_events + 掩码判定（Windows 由 subclass 接管，无需轮询）
+                #[cfg(target_os = "macos")]
+                {
+                    let pet_window = pet_window.clone();
+                    tauri::async_runtime::spawn(async move {
+                        let mut last_ignore = false;
+                        loop {
+                            // 拖拽期间强制不穿透，确保 pointer 事件正常
+                            let should_ignore = if PET_DRAGGING.load(Ordering::SeqCst) {
+                                false
+                            } else {
+                                compute_pet_cursor_ignore(&pet_window).unwrap_or(false)
+                            };
+                            if should_ignore != last_ignore {
+                                eprintln!("[pet-cursor] ignore={} ({}→{})",
+                                    should_ignore, last_ignore, should_ignore);
+                                let _ = pet_window.set_ignore_cursor_events(should_ignore);
+                                last_ignore = should_ignore;
+                            }
+                            // 50ms 轮询（20fps）：鼠标穿透不需要高帧率，降低 CPU 开销
+                            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
                         }
-                        // 50ms 轮询（20fps）：鼠标穿透不需要高帧率，降低 CPU 开销
-                        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-                    }
-                });
+                    });
+                }
             } else {
                 eprintln!("[pet-cursor] WARNING: pet window not found, click-through disabled");
             }
@@ -1026,6 +1162,7 @@ pub fn run() {
             set_pet_dragging,
             save_pet_position,
             restore_pet_position,
+            set_pet_hitmask,
             ensure_workspace_docs_dir,
             ensure_rabbit_specs_dir,
             ensure_rabbit_codewiki_dir,
