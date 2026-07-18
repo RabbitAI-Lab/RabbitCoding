@@ -88,18 +88,21 @@ fn bundled_node(app: &AppHandle) -> Option<PathBuf> {
 
 /// 内置 npm 的 JS 入口（npm-cli.js）
 /// 用 `node npm-cli.js` 执行 = npm，绕开 bin/npm 的 shebang（GUI 进程 PATH 里无 node）
+/// Node 官方发行包布局平台差异：Unix tarball 是 lib/node_modules/npm/...，
+/// Windows zip 是 node_modules/npm/...（无 lib 一级）。
 fn bundled_npm_cli(app: &AppHandle) -> Option<PathBuf> {
-    resource_path(
-        app,
-        &[
-            "node-runtime",
-            "lib",
-            "node_modules",
-            "npm",
-            "bin",
-            "npm-cli.js",
-        ],
-    )
+    #[cfg(not(target_os = "windows"))]
+    let rel: &[&str] = &[
+        "node-runtime",
+        "lib",
+        "node_modules",
+        "npm",
+        "bin",
+        "npm-cli.js",
+    ];
+    #[cfg(target_os = "windows")]
+    let rel: &[&str] = &["node-runtime", "node_modules", "npm", "bin", "npm-cli.js"];
+    resource_path(app, rel)
 }
 
 /// gitnexus 全局安装 prefix（应用私有，用户可写）
