@@ -6,15 +6,16 @@
  * 本地 dev 默认只有 build.rs 生成的 placeholder，故首次 dev 需补齐。
  *
  * 用法：
- *   node scripts/setup-node-runtime.mjs          # 缺失才下载（幂等；dev 自动调用）
- *   node scripts/setup-node-runtime.mjs --force   # 强制重新下载（升级 NODE_VERSION 后用）
+ *   node scripts/setup-node-runtime.mjs            # 缺失才下载（幂等；dev 自动调用）
+ *   node scripts/setup-node-runtime.mjs --force     # 强制重新下载（升级 NODE_VERSION 后用）
+ *   node scripts/setup-node-runtime.mjs --required  # 失败时 exit 1（构建场景：不放过坏产物）
  *
  * 行为：
  *   - 若 node-runtime 已有可运行的 node 二进制 → 跳过（仅 stat + --version，<100ms）。
  *   - 若缺失 → 按当前 platform/arch 下载官方 Node.js tarball/zip，
  *     解压到 src-tauri/resources/node-runtime（目录布局对齐 gitnexus.rs 的期望路径）。
- *   - 下载/解压失败 → 打印醒目警告并 exit 0（不阻断 dev；gitnexus 安装会报原错误，
- *     手动重跑 `pnpm setup:runtime` 即可）。
+ *   - 下载/解压失败 → 默认打印醒目警告并 exit 0（不阻断 dev；gitnexus 安装会报原错误，
+ *     手动重跑 `pnpm setup:runtime` 即可）。加 `--required` 则 exit 1（构建场景，避免产出坏产物）。
  *
  * NODE_VERSION 必须与 .github/workflows/build.yml 的 env.NODE_VERSION 保持一致
  * （dev/prod 同构，否则本地能跑、打包产物布局不一致会埋坑）。
@@ -183,8 +184,12 @@ function placeFiles(extractedDir) {
 // ============================================================
 
 async function main() {
-  const force = process.argv.slice(2).includes("--force");
-  console.log(`${TAG} platform=${process.platform}-${process.arch} target=${runtimeDir}`);
+  const args = process.argv.slice(2);
+  const force = args.includes("--force");
+  const required = args.includes("--required");
+  console.log(
+    `${TAG} platform=${process.platform}-${process.arch} target=${runtimeDir}${required ? " (required)" : ""}`
+  );
 
   if (!force && isRuntimeReady()) {
     const bin = expectedNodeBinary();
@@ -197,11 +202,16 @@ async function main() {
   const info = resolveAsset();
   if (!info) {
     warnUnsupported();
+    if (required) {
+      console.error(`${TAG} --required 模式：终止。`);
+      process.exit(1);
+    }
     return;
   }
 
   const url = `https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-${info.asset}.${info.ext}`;
   const tmp = mkdtempSync(join(tmpdir(), "node-runtime-"));
+  let failed = false;
   try {
     const archivePath = join(tmp, `node.${info.ext}`);
     const extracted = join(tmp, "extracted");
@@ -228,14 +238,25 @@ async function main() {
     }
     console.log(`${TAG} 完成 ✓ node ${ver}，npm-cli.js 就位`);
   } catch (err) {
-    // soft-fail：不阻断 dev（dev 模式 sidecar 走 tsx，node-runtime 仅 gitnexus 需要）
+    failed = true;
+    // 默认 soft-fail（不阻断 dev：dev 模式 sidecar 走 tsx，node-runtime 仅 gitnexus 需要）；
+    // --required 时由下方 finally 之后再 exit(1)，确保临时目录被清理。
     console.error("");
     console.error(`${TAG} ⚠️  下载/解压失败：${err && err.message ? err.message : err}`);
-    console.error(`${TAG}    dev 未被阻断，但 gitnexus「安装」会失败。`);
-    console.error(`${TAG}    请检查网络/代理后重跑：  pnpm setup:runtime`);
+    if (required) {
+      console.error(
+        `${TAG}    --required 模式：构建将终止。请检查网络/代理后重跑：pnpm setup:runtime --required`
+      );
+    } else {
+      console.error(`${TAG}    dev 未被阻断，但 gitnexus「安装」会失败。请检查网络/代理后重跑：pnpm setup:runtime`);
+    }
     console.error("");
   } finally {
     rmSync(tmp, { recursive: true, force: true });
+  }
+
+  if (failed && required) {
+    process.exit(1);
   }
 }
 
@@ -250,8 +271,13 @@ function warnUnsupported() {
   console.error("");
 }
 
+const REQUIRED = process.argv.slice(2).includes("--required");
 main().catch((err) => {
-  // 兜底：任何未捕获异常也走 soft-fail，绝不阻断 dev
+  // 兜底：任何未捕获异常
   console.error(`${TAG} ⚠️  未预期的错误：${err && err.stack ? err.stack : err}`);
+  if (REQUIRED) {
+    console.error(`${TAG}    --required 模式：终止。`);
+    process.exit(1);
+  }
   console.error(`${TAG}    dev 未被阻断。请重跑 pnpm setup:runtime 排查。`);
 });
