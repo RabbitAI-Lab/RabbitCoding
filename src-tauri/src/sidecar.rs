@@ -3,6 +3,8 @@ use std::collections::HashMap;
 use std::sync::Mutex;
 use tauri::{command, AppHandle, Emitter, Manager, State};
 
+use crate::process_ext::CommandNoWindowExt;
+
 /// Sidecar 进程状态
 pub struct SidecarState {
     inner: Mutex<Option<SidecarHandle>>,
@@ -99,8 +101,10 @@ pub fn start_sidecar(
     let sidecar_path = get_sidecar_path(&app);
 
     // 构建 Command 并动态注入环境变量
+    // Windows: CREATE_NO_WINDOW，否则 GUI 应用拉起 node.exe 会弹出常驻控制台黑窗
     let mut cmd = std::process::Command::new(&sidecar_path.program);
     cmd.args(&sidecar_path.args);
+    cmd.no_window();
 
     // 0. 清理从父进程（Tauri app / shell）继承的 ANTHROPIC_* 环境变量。
     //    确保 sidecar 的模型配置完全由本应用的 BYOK 注入决定，

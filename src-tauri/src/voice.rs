@@ -11,6 +11,8 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use tauri::{command, AppHandle, Emitter, Manager, State};
 
+use crate::process_ext::CommandNoWindowExt;
+
 // ============================================================
 // 模型定义与镜像源
 // ============================================================
@@ -518,6 +520,7 @@ pub fn asr_ensure_model(app: AppHandle) -> Result<(), String> {
                                     .arg(&archive_path)
                                     .arg("-C")
                                     .arg(&model_dir)
+                                    .no_window()
                                     .output();
                                 let _ = std::fs::remove_file(&archive_path);
 

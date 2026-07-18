@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use crate::process_ext::CommandNoWindowExt;
 use tauri::command;
 
 // ============================================================
@@ -71,6 +72,7 @@ fn git_exec(args: &[&str], current_dir: &Path) -> Result<String, String> {
     let output = Command::new("git")
         .args(args)
         .current_dir(current_dir)
+        .no_window()
         .output()
         .map_err(|e| format!("Failed to execute git: {e}"))?;
     if output.status.success() {

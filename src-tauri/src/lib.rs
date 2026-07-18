@@ -1,6 +1,7 @@
 mod sidecar;
 mod db;
 mod network;
+mod process_ext;
 mod model_test;
 mod prompt_optimize;
 mod gitnexus;
@@ -16,6 +17,7 @@ mod worktree;
 use serde::Serialize;
 use std::collections::{BTreeMap, HashSet};
 use std::process::Command;
+use crate::process_ext::CommandNoWindowExt;
 use tauri::{Manager, PhysicalSize, WindowEvent};
 use tauri_plugin_window_state::{AppHandleExt, StateFlags};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -313,6 +315,7 @@ fn get_git_info(path: String) -> Result<GitInfo, String> {
     let branch = Command::new("git")
         .args(["rev-parse", "--abbrev-ref", "HEAD"])
         .current_dir(dir)
+        .no_window()
         .output()
         .ok()
         .and_then(|o| {
@@ -326,6 +329,7 @@ fn get_git_info(path: String) -> Result<GitInfo, String> {
     let commit_id = Command::new("git")
         .args(["rev-parse", "--short", "HEAD"])
         .current_dir(dir)
+        .no_window()
         .output()
         .ok()
         .and_then(|o| {
@@ -366,6 +370,7 @@ fn open_notification_settings() -> Result<(), String> {
     {
         std::process::Command::new("cmd")
             .args(["/C", "start", "ms-settings:notifications"])
+            .no_window()
             .spawn()
             .map_err(|e| format!("Failed to open notification settings: {e}"))?;
     }
@@ -413,6 +418,7 @@ fn send_desktop_notification(title: String, body: String) -> Result<bool, String
         );
         let output = std::process::Command::new("powershell")
             .args(["-NoProfile", "-Command", &script])
+            .no_window()
             .output()
             .map_err(|e| format!("Failed to run powershell: {e}"))?;
         if !output.status.success() {

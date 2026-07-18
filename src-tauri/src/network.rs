@@ -1,5 +1,6 @@
 use serde::Serialize;
 use std::process::Command;
+use crate::process_ext::CommandNoWindowExt;
 use std::time::Instant;
 use tauri::command;
 
@@ -122,7 +123,7 @@ fn detect_proxy() -> ProxyInfo {
     #[cfg(target_os = "windows")]
     {
         // Windows: 使用 netsh winhttp show proxy
-        if let Ok(output) = Command::new("netsh").args(["winhttp", "show", "proxy"]).output() {
+        if let Ok(output) = Command::new("netsh").args(["winhttp", "show", "proxy"]).no_window().output() {
             let text = String::from_utf8_lossy(&output.stdout);
             // 输出格式:
             //   Proxy Server(s) :  proxy.example.com:8080
@@ -212,6 +213,7 @@ fn run_dig(host: &str, proxy: &ProxyInfo) -> DnsResult {
         // Windows: 使用 nslookup
         let output = Command::new("nslookup")
             .arg(host)
+            .no_window()
             .output();
 
         let elapsed = start.elapsed().as_millis() as u64;
@@ -407,6 +409,7 @@ fn run_curl_http(endpoint: &str, proxy: &ProxyInfo) -> HttpResult {
         .arg("--max-time")
         .arg("10")
         .arg(endpoint)
+        .no_window()
         .output();
 
     let (status_code, http_version, response_time_ms, content_type) = match metrics_output {
@@ -444,6 +447,7 @@ fn run_curl_http(endpoint: &str, proxy: &ProxyInfo) -> HttpResult {
             .arg("--max-time")
             .arg("10")
             .arg(endpoint)
+            .no_window()
             .output();
 
         let mut tls = None;
@@ -494,6 +498,7 @@ fn run_curl_http(endpoint: &str, proxy: &ProxyInfo) -> HttpResult {
             .arg("--max-time")
             .arg("10")
             .arg(endpoint)
+            .no_window()
             .output()
         {
             if !o.status.success() {
@@ -560,6 +565,7 @@ fn run_ping(target: &str, _proxy: &ProxyInfo) -> PingResult {
         .arg("-n")
         .arg("4")
         .arg(target)
+        .no_window()
         .output();
 
     #[cfg(not(target_os = "windows"))]

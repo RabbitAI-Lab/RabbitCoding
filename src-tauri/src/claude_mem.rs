@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
+use crate::process_ext::CommandNoWindowExt;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{command, AppHandle, Emitter, Manager};
 
@@ -70,7 +71,7 @@ pub(crate) fn find_claude() -> Option<(String, Vec<String>)> {
     let claude_cmd = "claude";
 
     // 1. 直接尝试 claude --version
-    let direct = Command::new(claude_cmd).arg("--version").output();
+    let direct = Command::new(claude_cmd).arg("--version").no_window().output();
     if let Ok(out) = &direct {
         if out.status.success() {
             return Some((claude_cmd.into(), vec![]));
@@ -83,6 +84,7 @@ pub(crate) fn find_claude() -> Option<(String, Vec<String>)> {
         let shell_check = Command::new("cmd")
             .arg("/C")
             .arg("where claude 2>nul")
+            .no_window()
             .output();
         if let Ok(o) = &shell_check {
             if o.status.success() {
@@ -154,6 +156,7 @@ pub(crate) fn find_claude() -> Option<(String, Vec<String>)> {
 /// 构建带 CLAUDE_CONFIG_DIR 注入的 claude Command
 pub(crate) fn claude_command(claude_path: &str, config_dir: &PathBuf) -> Command {
     let mut cmd = Command::new(claude_path);
+    cmd.no_window();
     // ★★★ 核心注入点：与 sidecar 完全一致的配置根目录 ★★★
     cmd.env("CLAUDE_CONFIG_DIR", config_dir);
     cmd

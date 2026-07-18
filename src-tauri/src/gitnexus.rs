@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
+use crate::process_ext::CommandNoWindowExt;
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{command, AppHandle, Emitter, Manager};
@@ -111,9 +112,20 @@ fn gitnexus_prefix(app: &AppHandle) -> PathBuf {
 }
 
 /// 已安装的 gitnexus CLI 入口 JS（`node index.js` = gitnexus）
+/// npm 全局布局平台差异：Unix 是 <prefix>/lib/node_modules/...，
+/// Windows 是 <prefix>/node_modules/...（无 lib 一级）。
 fn gitnexus_cli_js(app: &AppHandle) -> Option<PathBuf> {
-    let p = gitnexus_prefix(app)
+    let prefix = gitnexus_prefix(app);
+    #[cfg(not(target_os = "windows"))]
+    let p = prefix
         .join("lib")
+        .join("node_modules")
+        .join("gitnexus")
+        .join("dist")
+        .join("cli")
+        .join("index.js");
+    #[cfg(target_os = "windows")]
+    let p = prefix
         .join("node_modules")
         .join("gitnexus")
         .join("dist")
@@ -140,6 +152,7 @@ fn npm_command(app: &AppHandle) -> Result<Command, String> {
         .ok_or_else(|| "Bundled npm-cli.js missing".to_string())?;
     let mut cmd = Command::new(node);
     cmd.arg(npm_cli);
+    cmd.no_window();
     Ok(cmd)
 }
 
@@ -153,6 +166,7 @@ fn run_gitnexus(app: &AppHandle, args: &[&str]) -> Result<String, String> {
     for a in args {
         cmd.arg(a);
     }
+    cmd.no_window();
 
     let output = cmd
         .output()
@@ -356,6 +370,7 @@ pub async fn gitnexus_check(app: AppHandle) -> Result<GitnexusCheckResult, Strin
             let version = match Command::new(&node_path)
                 .arg(&cli_path)
                 .arg("--version")
+                .no_window()
                 .output()
             {
                 Ok(o) if o.status.success() => {
@@ -415,6 +430,7 @@ pub async fn gitnexus_analyze(
 
     tokio::task::spawn_blocking(move || {
         let mut cmd = Command::new(&node);
+        cmd.no_window();
         cmd.arg(&cli);
         cmd.arg("analyze");
         if force {
@@ -654,6 +670,7 @@ pub async fn gitnexus_group_sync(
 
     tokio::task::spawn_blocking(move || {
         let mut cmd = Command::new(&node);
+        cmd.no_window();
         cmd.arg(&cli);
         cmd.args(&["group", "sync", &name]);
         cmd.stdout(Stdio::piped()).stderr(Stdio::piped());

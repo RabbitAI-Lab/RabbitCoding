@@ -1,5 +1,8 @@
 //! Wiki 生成模块 — 桌面通知
 
+#[cfg(target_os = "windows")]
+use crate::process_ext::CommandNoWindowExt;
+
 /// 发送桌面通知（复用 osascript/PowerShell 底层逻辑）
 pub(super) fn notify_wiki_status(
     kind: &str, // "wiki_done" | "wiki_error" | "wiki_paused"
@@ -69,6 +72,7 @@ fn send_notification_os(title: &str, body: &str) -> Result<bool, String> {
             body.replace('\'', "''"),
         );
         let output = std::process::Command::new("powershell")
+            .no_window()
             .args(["-NoProfile", "-Command", &script])
             .output()
             .map_err(|e| format!("powershell failed: {e}"))?;
