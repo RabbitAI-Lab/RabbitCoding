@@ -205,7 +205,7 @@ export default function PetWindow() {
     try {
       const { width, height, mask } = generatePetHitmask();
       if (mask) {
-        void invoke('set_pet_hitmask', { width, height, mask }).catch((e) => {
+        void invoke('set_pet_hitmask', { width, height, maskBase64: mask }).catch((e) => {
           console.warn('[pet-hitmask] set_pet_hitmask failed:', e);
         });
       }
