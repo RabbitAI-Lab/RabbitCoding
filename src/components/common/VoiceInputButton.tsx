@@ -28,7 +28,9 @@ export default function VoiceInputButton({ onText, currentText }: VoiceInputButt
   useEffect(() => {
     checkVoiceSupported().then(setVoiceSupported);
   }, []);
-  if (!voiceSupported) return null;
+  // 注意：不支持的平台（如 Windows ARM64）不能在这里提前 return ——
+  // 后续 hooks 必须每次都执行，否则异步判定翻转时会触发 React error #300。
+  // 隐藏逻辑放在所有 hooks 之后（见文件末尾 return 前）。
   const [showDownloadModal, setShowDownloadModal] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState<DownloadProgress | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
@@ -114,6 +116,10 @@ export default function VoiceInputButton({ onText, currentText }: VoiceInputButt
       setDownloadProgress(null);
     }
   }, [modelState, showDownloadModal]);
+
+  // 不支持的平台（如 Windows ARM64 未编译 sherpa-onnx）隐藏按钮。
+  // 必须放在所有 hooks 之后，否则违反 hooks 顺序规则。
+  if (!voiceSupported) return null;
 
   const tooltipContent = error
     ? error
